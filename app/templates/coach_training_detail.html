@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Trainings-Detail – Coach{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <a href="{{ url_for('attendance.coach_dashboard') }}" class="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline mb-4">
+    <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
+  </a>
+
+  <div class="mb-6">
+    <h1 class="text-xl font-bold">{{ training.title or 'Training' }}</h1>
+    <div class="flex flex-wrap gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
+      {% if training.date %}<span><i class="bi bi-calendar3 mr-1"></i>{{ training.date }}</span>{% endif %}
+      {% if training.time %}<span><i class="bi bi-clock mr-1"></i>{{ training.time }}</span>{% endif %}
+      {% if training.location %}<span><i class="bi bi-geo-alt mr-1"></i>{{ training.location }}</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="grid grid-cols-3 gap-3 mb-6">
+    <div class="rounded-xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/20 p-4 text-center">
+      <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ groups.attending|length }}</div>
+      <div class="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">👍 Dabei</div>
+    </div>
+    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-4 text-center">
+      <div class="text-3xl font-bold text-slate-500 dark:text-slate-400">{{ groups.maybe|length }}</div>
+      <div class="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">❓ Unsicher</div>
+    </div>
+    <div class="rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-4 text-center">
+      <div class="text-3xl font-bold text-red-500">{{ groups.declined|length }}</div>
+      <div class="text-xs text-red-500 font-semibold mt-1">👎 Abgesagt</div>
+    </div>
+  </div>
+
+  <!-- Teilnehmerlisten -->
+  {% for group_key, group_label, group_color, group_bg in [
+    ('attending', '👍 Zugesagt', 'green', 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900'),
+    ('maybe', '❓ Unsicher', 'slate', 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'),
+    ('declined', '👎 Abgesagt', 'red', 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900'),
+  ] %}
+  {% if groups[group_key] %}
+  <div class="rounded-xl border {{ group_bg }} p-4 mb-3">
+    <h3 class="font-semibold text-sm mb-3 text-{{ group_color }}-700 dark:text-{{ group_color }}-300">
+      {{ group_label }} ({{ groups[group_key]|length }})
+    </h3>
+    <div class="space-y-2">
+      {% for p in groups[group_key] %}
+      <div class="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+        <div class="flex items-center gap-2">
+          <div class="h-7 w-7 rounded-full bg-{{ group_color }}-100 dark:bg-{{ group_color }}-900/40 flex items-center justify-center text-xs font-bold text-{{ group_color }}-600 dark:text-{{ group_color }}-400">
+            {{ (p.display_name or p.username or '?')[0].upper() }}
+          </div>
+          <div>
+            <div class="text-sm font-medium">{{ p.display_name or p.username }}</div>
+            {% if p.first_name or p.last_name %}
+            <div class="text-xs text-slate-400">{{ p.first_name }} {{ p.last_name }}</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="text-right">
+          {% if p.reason %}
+          <div class="text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title="{{ p.reason }}">
+            <i class="bi bi-chat-quote mr-1"></i>{{ p.reason }}
+          </div>
+          {% endif %}
+          <div class="text-[10px] text-slate-400">
+            {% if p.updated_at %}{{ p.updated_at.strftime('%d.%m. %H:%M') if p.updated_at is not string else p.updated_at[:16] }}{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {% if not groups.attending and not groups.maybe and not groups.declined %}
+  <div class="text-center py-12">
+    <div class="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
+      <i class="bi bi-inbox text-xl text-slate-400"></i>
+    </div>
+    <p class="text-slate-500 dark:text-slate-400 text-sm">Noch keine Rückmeldungen zu diesem Training.</p>
+  </div>
+  {% endif %}
+
+  <!-- Copy for WhatsApp -->
+  <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-sm font-semibold"><i class="bi bi-whatsapp mr-1 text-green-500"></i> WhatsApp-Export</h3>
+      <button onclick="copyWhatsApp()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+        <i class="bi bi-clipboard mr-1"></i>Kopieren
+      </button>
+    </div>
+    <pre id="whatsappText" class="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+📋 {{ training.title or 'Training' }} ({{ training.date or '' }} {{ training.time or '' }})
+✅ Zugesagt ({{ groups.attending|length }}):
+{% for p in groups.attending %}  • {{ p.display_name or p.username }}{% if p.reason %} ({{ p.reason }}){% endif %}
+{% endfor %}
+❓ Unsicher ({{ groups.maybe|length }}):
+{% for p in groups.maybe %}  • {{ p.display_name or p.username }}{% if p.reason %} – {{ p.reason }}{% endif %}
+{% endfor %}
+👎 Abgesagt ({{ groups.declined|length }}):
+{% for p in groups.declined %}  • {{ p.display_name or p.username }}{% if p.reason %} – {{ p.reason }}{% endif %}
+{% endfor %}</pre>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyWhatsApp() {
+  const text = document.getElementById('whatsappText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.innerHTML = '<i class="bi bi-check-lg mr-1"></i>Kopiert!';
+    setTimeout(() => {
+      btn.innerHTML = '<i class="bi bi-clipboard mr-1"></i>Kopieren';
+    }, 2000);
+  }).catch(() => {
+    alert('Konnte nicht kopiert werden.');
+  });
+}
+</script>
+{% endblock %}

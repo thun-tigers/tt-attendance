@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Trainings-Anmeldung – Tigers{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <h1 class="text-xl font-bold mb-1">Trainings-Anmeldung</h1>
+  <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Melde dich für die kommenden Trainings an oder ab</p>
+
+  {% if trainings %}
+  <div class="space-y-4">
+    {% for t in trainings %}
+    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm" data-training-id="{{ t.id }}">
+      <!-- Training Info -->
+      <div class="flex items-start gap-3 mb-4">
+        <div class="h-10 w-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+          <i class="bi bi-calendar-event text-lg"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h3 class="font-semibold text-sm">{{ t.title }}</h3>
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            {% if t.date %}<span><i class="bi bi-calendar3 mr-1"></i>{{ t.date }}</span>{% endif %}
+            {% if t.time %}<span><i class="bi bi-clock mr-1"></i>{{ t.time }}</span>{% endif %}
+            {% if t.location %}<span><i class="bi bi-geo-alt mr-1"></i>{{ t.location }}</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- 3-Button System -->
+      <div class="flex gap-2" role="group" aria-label="Anmeldestatus">
+        {% set statuses = [
+          ('attending', 'bi-hand-thumbs-up-fill', 'Dabei', 'bg-green-500 hover:bg-green-600 text-white', 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700'),
+          ('maybe', 'bi-question-circle-fill', 'Unsicher', 'bg-slate-400 hover:bg-slate-500 text-white', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600'),
+          ('declined', 'bi-hand-thumbs-down-fill', 'Absage', 'bg-red-500 hover:bg-red-600 text-white', 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700'),
+        ] %}
+        {% for val, icon, label, active_bg, inactive_bg in statuses %}
+        <button
+          class="status-btn flex-1 flex flex-col items-center gap-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border-2
+            {% if t.my_status == val %}{{ active_bg }} border-transparent shadow-md scale-105{% else %}{{ inactive_bg }} border-transparent hover:scale-105{% endif %}"
+          data-training-id="{{ t.id }}"
+          data-status="{{ val }}"
+          onclick="setStatus(this, '{{ t.id }}', '{{ val }}')">
+          <i class="bi {{ icon }} text-xl"></i>
+          <span>{{ label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+
+      <!-- Reason input (for maybe/declined) -->
+      <div class="reason-container mt-3 hidden" data-training-id="{{ t.id }}">
+        <div class="flex gap-2">
+          <input type="text"
+            class="reason-input flex-1 w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+            placeholder="Grund eingeben (Pflichtfeld)..."
+            data-training-id="{{ t.id }}"
+            {% if t.my_reason %}value="{{ t.my_reason }}"{% endif %}>
+          <button
+            class="reason-save px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-50"
+            onclick="saveReason('{{ t.id }}')">
+            <i class="bi bi-check-lg"></i>
+          </button>
+        </div>
+        <p class="reason-error text-xs text-red-500 mt-1 hidden">Bitte gib einen Grund an.</p>
+      </div>
+
+      <!-- Attendance count -->
+      <div class="attendance-summary mt-3 text-xs text-slate-400 text-center hidden">
+        <span>👥 <span class="attending-count">0</span> dabei · <span class="maybe-count">0</span> unsicher · <span class="declined-count">0</span> abgesagt</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <!-- Empty state -->
+  <div class="text-center py-16">
+    <div class="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+      <i class="bi bi-calendar-week text-2xl text-slate-400"></i>
+    </div>
+    <h3 class="font-semibold text-slate-500 dark:text-slate-400">Keine Trainings gefunden</h3>
+    <p class="text-sm text-slate-400 mt-1">Sobald Trainings in der Agenda erfasst sind, kannst du dich hier anmelden.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function setStatus(btn, trainingId, status) {
+  const card = btn.closest('[data-training-id]');
+  const buttons = card.querySelectorAll('.status-btn');
+  const reasonContainer = card.querySelector('.reason-container');
+
+  // Update visual state
+  buttons.forEach(b => {
+    b.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white', 'shadow-md', 'scale-105',
+      'bg-slate-400', 'hover:bg-slate-500',
+      'bg-red-500', 'hover:bg-red-600');
+    const val = b.dataset.status;
+    if (val === 'attending') b.className = b.className + ' bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700';
+    else if (val === 'maybe') b.className = b.className + ' bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
+    else if (val === 'declined') b.className = b.className + ' bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700';
+    b.classList.add('flex-1', 'flex', 'flex-col', 'items-center', 'gap-1', 'py-2.5', 'px-3', 'rounded-xl', 'text-xs', 'font-semibold', 'transition-all', 'border-2', 'hover:scale-105');
+  });
+
+  // If maybe or declined, show reason input
+  if (status === 'maybe' || status === 'declined') {
+    reasonContainer.classList.remove('hidden');
+    // Don't send yet - wait for reason
+    return;
+  }
+
+  // Attending - no reason needed, send immediately
+  reasonContainer.classList.add('hidden');
+  sendStatus(trainingId, status, null);
+}
+
+function saveReason(trainingId) {
+  const card = document.querySelector(`[data-training-id="${trainingId}"]`);
+  const input = card.querySelector('.reason-input');
+  const error = card.querySelector('.reason-error');
+  const reason = input.value.trim();
+
+  if (!reason) {
+    error.classList.remove('hidden');
+    return;
+  }
+  error.classList.add('hidden');
+
+  // Determine which status is selected
+  const activeBtn = card.querySelector('.status-btn.bg-green-500, .status-btn.bg-slate-400, .status-btn.bg-red-500');
+  const status = activeBtn ? activeBtn.dataset.status : 'maybe';
+
+  sendStatus(trainingId, status, reason);
+}
+
+function sendStatus(trainingId, status, reason) {
+  fetch(`/api/trainings/${trainingId}/set-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, reason }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+    // Update summary
+    const card = document.querySelector(`[data-training-id="${trainingId}"]`);
+    const summary = card.querySelector('.attendance-summary');
+    if (data.summary) {
+      summary.querySelector('.attending-count').textContent = data.summary.attending || 0;
+      summary.querySelector('.maybe-count').textContent = data.summary.maybe || 0;
+      summary.querySelector('.declined-count').textContent = data.summary.declined || 0;
+      summary.classList.remove('hidden');
+    }
+    // Hide reason input after successful save
+    const rc = card.querySelector('.reason-container');
+    rc.classList.add('hidden');
+  })
+  .catch(err => console.error('Error:', err));
+}
+
+// Load summaries on page load
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('[data-training-id]').forEach(card => {
+    const trainingId = card.dataset.trainingId;
+    fetch(`/api/trainings/${trainingId}/attendance`)
+      .then(r => r.json())
+      .then(data => {
+        const summary = card.querySelector('.attendance-summary');
+        if (data.summary) {
+          summary.querySelector('.attending-count').textContent = data.summary.attending || 0;
+          summary.querySelector('.maybe-count').textContent = data.summary.maybe || 0;
+          summary.querySelector('.declined-count').textContent = data.summary.declined || 0;
+          summary.classList.remove('hidden');
+        }
+      })
+      .catch(() => {});
+  });
+});
+</script>
+{% endblock %}
