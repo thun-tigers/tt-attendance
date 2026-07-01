@@ -1,7 +1,7 @@
 import jwt
 import requests
 from datetime import datetime, timedelta, timezone
-from flask import current_app
+from flask import current_app, session as flask_session
 
 
 def generate_jwt(user, hours=None, memberships=None, permissions=None):
@@ -149,8 +149,25 @@ def fetch_training_occurrence_from_agenda(occurrence_id, team_codes=None):
 
 
 def get_current_user(request):
-    """Extract current user from JWT cookie or Authorization header."""
-    from flask import session as flask_session
+    """Extract current user from the service session or legacy JWT cookie."""
+
+    current_user = flask_session.get('current_user')
+    if isinstance(current_user, dict) and current_user.get('id'):
+        return current_user
+
+    session_user_id = flask_session.get('user_id')
+    session_username = flask_session.get('username')
+    if session_user_id and session_username:
+        return {
+            'id': session_user_id,
+            'username': session_username,
+            'role': flask_session.get('platform_role') or flask_session.get('user_role') or 'user',
+            'display_name': flask_session.get('display_name') or session_username,
+            'memberships': flask_session.get('memberships') or [],
+            'permissions': flask_session.get('permissions') or [],
+            'teams': flask_session.get('teams') or [],
+            'member_roles': flask_session.get('member_roles') or [],
+        }
 
     token = None
     auth_header = request.headers.get('Authorization', '')

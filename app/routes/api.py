@@ -20,6 +20,43 @@ def _error(message, status_code=400):
     return jsonify({'error': message}), status_code
 
 
+def _fetch_active_member_count(team_code):
+    team_code = (team_code or '').strip().upper()
+    if not team_code:
+        return None
+
+    auth_url = current_app.config.get('TT_AUTH_INTERNAL_URL', 'http://tt-auth:5000').rstrip('/')
+    secret = current_app.config.get('INTERNAL_API_SECRET')
+    try:
+        response = requests.get(
+            f'{auth_url}/api/internal/teams/{team_code}/active-member-count',
+            headers={'X-TT-Internal-Secret': secret},
+            timeout=5,
+        )
+        if response.status_code == 200:
+            payload = response.json() or {}
+            return int(payload.get('active_member_count', 0))
+    except (requests.RequestException, TypeError, ValueError):
+        pass
+    return None
+
+
+def _build_summary(occurrence_id, training=None):
+    attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
+    summary = {'attending': 0, 'maybe': 0, 'declined': 0, 'open': 0}
+
+    for attendance in attendances:
+        summary[attendance.status] = summary.get(attendance.status, 0) + 1
+
+    team_code = (training or {}).get('team_code')
+    expected_count = _fetch_active_member_count(team_code)
+    if expected_count is not None:
+        responded = summary['attending'] + summary['maybe'] + summary['declined']
+        summary['open'] = max(expected_count - responded, 0)
+
+    return summary
+
+
 # ===== Spieler-Endpunkte =====
 
 @bp.route('/trainings/<occurrence_id>/attendance', methods=['GET', 'POST'])
@@ -28,14 +65,13 @@ def handle_attendance(occurrence_id):
     current_user = get_current_user(request)
 
     if request.method == 'GET':
-        # Get all attendances for this training
-        attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
-        summary = {'attending': 0, 'maybe': 0, 'declined': 0}
+        training = fetch_training_occurrence_from_agenda(occurrence_id)
+        summary = _build_summary(occurrence_id, training)
 
         # Fetch user details from tt-auth
         participants = []
+        attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
         for a in attendances:
-            summary[a.status] = summary.get(a.status, 0) + 1
             user_info = fetch_user_from_auth(a.user_id) or {'id': a.user_id, 'username': f'User {a.user_id}'}
             participants.append({
                 'user_id': a.user_id,
@@ -99,7 +135,9 @@ def handle_attendance(occurrence_id):
         db.session.add(attendance)
 
     db.session.commit()
-    return jsonify({'status': 'ok', 'attendance': attendance.to_dict()}), 201
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    summary = _build_summary(occurrence_id, training)
+    return jsonify({'status': 'ok', 'attendance': attendance.to_dict(), 'summary': summary}), 201
 
 
 @bp.route('/me/attendances', methods=['GET'])
@@ -154,7 +192,7 @@ def my_attendances():
 def coach_training_detail(occurrence_id):
     """Coach view: detailed attendance list for a training."""
     current_user = get_current_user(request)
-    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
+    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach', 'team_betreuer'):
         return _error('forbidden', 403)
 
     attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
@@ -189,7 +227,7 @@ def coach_training_detail(occurrence_id):
 def coach_summary():
     """Get attendance summary across all upcoming trainings."""
     current_user = get_current_user(request)
-    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
+    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach', 'team_betreuer'):
         return _error('forbidden', 403)
 
     # Get all trainings from tt-agenda

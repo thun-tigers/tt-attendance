@@ -2,123 +2,104 @@
 {% block title %}Trainings-Detail – Coach{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto">
+<div class="max-w-4xl mx-auto">
   <a href="{{ url_for('attendance.coach_dashboard') }}" class="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline mb-4">
     <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
   </a>
 
-  <div class="mb-6">
+  <div class="mb-5">
     <h1 class="text-xl font-bold">{{ training.title or 'Training' }}</h1>
     <div class="flex flex-wrap gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
       {% if training.date %}<span><i class="bi bi-calendar3 mr-1"></i>{{ training.date }}</span>{% endif %}
       {% if training.time %}<span><i class="bi bi-clock mr-1"></i>{{ training.time }}</span>{% endif %}
       {% if training.location %}<span><i class="bi bi-geo-alt mr-1"></i>{{ training.location }}</span>{% endif %}
     </div>
-  </div>
-
-  <!-- Summary cards -->
-  <div class="grid grid-cols-3 gap-3 mb-6">
-    <div class="rounded-xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/20 p-4 text-center">
-      <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ groups.attending|length }}</div>
-      <div class="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">👍 Dabei</div>
-    </div>
-    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-4 text-center">
-      <div class="text-3xl font-bold text-slate-500 dark:text-slate-400">{{ groups.maybe|length }}</div>
-      <div class="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">❓ Unsicher</div>
-    </div>
-    <div class="rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-4 text-center">
-      <div class="text-3xl font-bold text-red-500">{{ groups.declined|length }}</div>
-      <div class="text-xs text-red-500 font-semibold mt-1">👎 Abgesagt</div>
+    <div class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+      {{ summary.attending }} dabei · {{ summary.maybe }} unsicher · {{ summary.declined }} abgesagt · {{ summary.open }} offen
     </div>
   </div>
 
-  <!-- Teilnehmerlisten -->
-  {% for group_key, group_label, group_color, group_bg in [
-    ('attending', '👍 Zugesagt', 'green', 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900'),
-    ('maybe', '❓ Unsicher', 'slate', 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'),
-    ('declined', '👎 Abgesagt', 'red', 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900'),
-  ] %}
-  {% if groups[group_key] %}
-  <div class="rounded-xl border {{ group_bg }} p-4 mb-3">
-    <h3 class="font-semibold text-sm mb-3 text-{{ group_color }}-700 dark:text-{{ group_color }}-300">
-      {{ group_label }} ({{ groups[group_key]|length }})
-    </h3>
-    <div class="space-y-2">
-      {% for p in groups[group_key] %}
-      <div class="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-        <div class="flex items-center gap-2">
-          <div class="h-7 w-7 rounded-full bg-{{ group_color }}-100 dark:bg-{{ group_color }}-900/40 flex items-center justify-center text-xs font-bold text-{{ group_color }}-600 dark:text-{{ group_color }}-400">
-            {{ (p.display_name or p.username or '?')[0].upper() }}
-          </div>
-          <div>
-            <div class="text-sm font-medium">{{ p.display_name or p.username }}</div>
-            {% if p.first_name or p.last_name %}
-            <div class="text-xs text-slate-400">{{ p.first_name }} {{ p.last_name }}</div>
-            {% endif %}
+  <div class="rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+    <div class="grid grid-cols-[minmax(0,1.8fr)_minmax(5rem,0.7fr)_minmax(10rem,1.4fr)] gap-3 px-4 py-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 border-b border-slate-200/80 dark:border-slate-700">
+      <div>Spieler</div>
+      <div>Status</div>
+      <div class="text-right">Aktion</div>
+    </div>
+
+    <div class="divide-y divide-slate-200/80 dark:divide-slate-700">
+      {% for p in participants %}
+      <div class="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[minmax(0,1.8fr)_minmax(5rem,0.7fr)_minmax(10rem,1.4fr)] md:items-center">
+        <div class="min-w-0">
+          <div class="font-semibold text-sm truncate">{{ p.display_name or p.username }}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400 truncate">
+            {{ p.position_label or 'Ohne Gruppe' }}
           </div>
         </div>
-        <div class="text-right">
-          {% if p.reason %}
-          <div class="text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title="{{ p.reason }}">
-            <i class="bi bi-chat-quote mr-1"></i>{{ p.reason }}
-          </div>
-          {% endif %}
-          <div class="text-[10px] text-slate-400">
-            {% if p.updated_at %}{{ p.updated_at.strftime('%d.%m. %H:%M') if p.updated_at is not string else p.updated_at[:16] }}{% endif %}
-          </div>
+
+        <div>
+          {% set status_map = {
+            'attending': ('Dabei', 'bg-green-500/10 text-green-700 dark:text-green-200 border-green-200 dark:border-green-900'),
+            'maybe': ('Unsicher', 'bg-slate-500/10 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'),
+            'declined': ('Abgesagt', 'bg-rose-500/10 text-rose-700 dark:text-rose-200 border-rose-200 dark:border-rose-900'),
+            'open': ('Offen', 'bg-amber-500/10 text-amber-700 dark:text-amber-200 border-amber-200 dark:border-amber-900')
+          } %}
+          {% set status_text, status_classes = status_map.get(p.status, ('Offen', 'bg-amber-500/10 text-amber-700 dark:text-amber-200 border-amber-200 dark:border-amber-900')) %}
+          <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold {{ status_classes }}">
+            {{ status_text }}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap justify-start md:justify-end gap-1.5">
+          {% for action_status, action_label, action_classes in [
+            ('attending', 'Dabei', 'border-green-200 text-green-700 dark:border-green-900 dark:text-green-200'),
+            ('maybe', 'Unsicher', 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'),
+            ('declined', 'Abgesagt', 'border-rose-200 text-rose-700 dark:border-rose-900 dark:text-rose-200'),
+            ('open', 'Offen', 'border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-200'),
+          ] %}
+          <button
+            type="button"
+            data-user-id="{{ p.user_id }}"
+            data-status="{{ action_status }}"
+            class="coach-status-btn inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition hover:opacity-90 {{ action_classes }} {% if p.status == action_status %}bg-current/10{% endif %}">
+            {{ action_label }}
+          </button>
+          {% endfor %}
         </div>
       </div>
       {% endfor %}
     </div>
-  </div>
-  {% endif %}
-  {% endfor %}
-
-  {% if not groups.attending and not groups.maybe and not groups.declined %}
-  <div class="text-center py-12">
-    <div class="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
-      <i class="bi bi-inbox text-xl text-slate-400"></i>
-    </div>
-    <p class="text-slate-500 dark:text-slate-400 text-sm">Noch keine Rückmeldungen zu diesem Training.</p>
-  </div>
-  {% endif %}
-
-  <!-- Copy for WhatsApp -->
-  <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-    <div class="flex items-center justify-between mb-2">
-      <h3 class="text-sm font-semibold"><i class="bi bi-whatsapp mr-1 text-green-500"></i> WhatsApp-Export</h3>
-      <button onclick="copyWhatsApp()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-        <i class="bi bi-clipboard mr-1"></i>Kopieren
-      </button>
-    </div>
-    <pre id="whatsappText" class="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
-📋 {{ training.title or 'Training' }} ({{ training.date or '' }} {{ training.time or '' }})
-✅ Zugesagt ({{ groups.attending|length }}):
-{% for p in groups.attending %}  • {{ p.display_name or p.username }}{% if p.reason %} ({{ p.reason }}){% endif %}
-{% endfor %}
-❓ Unsicher ({{ groups.maybe|length }}):
-{% for p in groups.maybe %}  • {{ p.display_name or p.username }}{% if p.reason %} – {{ p.reason }}{% endif %}
-{% endfor %}
-👎 Abgesagt ({{ groups.declined|length }}):
-{% for p in groups.declined %}  • {{ p.display_name or p.username }}{% if p.reason %} – {{ p.reason }}{% endif %}
-{% endfor %}</pre>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function copyWhatsApp() {
-  const text = document.getElementById('whatsappText').textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = event.target;
-    btn.innerHTML = '<i class="bi bi-check-lg mr-1"></i>Kopiert!';
-    setTimeout(() => {
-      btn.innerHTML = '<i class="bi bi-clipboard mr-1"></i>Kopieren';
-    }, 2000);
-  }).catch(() => {
-    alert('Konnte nicht kopiert werden.');
-  });
-}
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('.coach-status-btn');
+  if (!button) return;
+
+  const userId = button.dataset.userId;
+  const status = button.dataset.status;
+  const endpoint = "{{ coach_status_base_url }}".replace('/0/status', '/' + userId + '/status');
+
+  button.disabled = true;
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+      throw new Error('request_failed');
+    }
+    window.location.reload();
+  } catch (error) {
+    alert('Status konnte nicht gespeichert werden.');
+  } finally {
+    button.disabled = false;
+  }
+});
 </script>
 {% endblock %}

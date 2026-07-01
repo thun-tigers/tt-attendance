@@ -13,8 +13,8 @@
   {% if trainings %}
   <div class="space-y-3">
     {% for t in trainings %}
-    <a href="{{ url_for('attendance.coach_training_detail', occurrence_id=t.id) }}"
-       class="block rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+    {% set detail_url = url_for('attendance.coach_training_detail', occurrence_id=t.id) %}
+    <a href="{{ detail_url }}" class="block rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-700 transition">
       <div class="flex items-center justify-between mb-3">
         <div>
           <h3 class="font-semibold text-sm">{{ t.title }}</h3>
@@ -23,27 +23,14 @@
             {% if t.time %}<span class="ml-3"><i class="bi bi-clock mr-1"></i>{{ t.time }}</span>{% endif %}
           </div>
         </div>
-        <div class="text-right">
+        <div class="text-right flex flex-col items-end gap-2">
           <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ t.summary.attending }}</div>
           <div class="text-[10px] text-slate-400 uppercase tracking-wider">Zusagen</div>
         </div>
       </div>
 
-      <!-- Progress bar -->
-      <div class="flex h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-        {% set total = t.summary.attending + t.summary.maybe + t.summary.declined %}
-        {% if total > 0 %}
-        <div class="bg-green-500 h-full transition-all" style="width: {{ (t.summary.attending / total * 100)|round }}%"></div>
-        <div class="bg-slate-400 h-full transition-all" style="width: {{ (t.summary.maybe / total * 100)|round }}%"></div>
-        <div class="bg-red-500 h-full transition-all" style="width: {{ (t.summary.declined / total * 100)|round }}%"></div>
-        {% endif %}
-      </div>
-
-      <div class="flex gap-4 mt-2 text-xs">
-        <span class="text-green-600 dark:text-green-400"><i class="bi bi-hand-thumbs-up-fill mr-1"></i>{{ t.summary.attending }} dabei</span>
-        <span class="text-slate-500"><i class="bi bi-question-circle-fill mr-1"></i>{{ t.summary.maybe }} unsicher</span>
-        <span class="text-red-500"><i class="bi bi-hand-thumbs-down-fill mr-1"></i>{{ t.summary.declined }} abgesagt</span>
-      </div>
+      {% set batches = t.batches %}
+      {% include "_coach_batches.html" with context %}
     </a>
     {% endfor %}
   </div>

@@ -1,0 +1,14 @@
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
+  {% for batch in batches %}
+  <div class="group block rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+    <div class="px-3 pt-3 pb-2">
+      <div class="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+        {{ batch.short_label }}
+      </div>
+      <div class="mt-1 text-3xl font-black leading-none text-indigo-500 dark:text-indigo-400">
+        {{ batch.attending_count }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

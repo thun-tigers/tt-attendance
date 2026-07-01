@@ -6,6 +6,7 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY')
+    SESSION_COOKIE_NAME = os.environ.get('SESSION_COOKIE_NAME', 'tt_attendance_session')
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get('SQLALCHEMY_DATABASE_URI')
         or os.environ.get('DATABASE_URL')
@@ -18,6 +19,7 @@ class Config:
     # SSO / Auth
     AUTH_BASE_URL = os.environ.get('AUTH_BASE_URL', 'http://localhost:8085')
     TT_AUTH_INTERNAL_URL = os.environ.get('TT_AUTH_INTERNAL_URL', 'http://tt-auth:5000')
+    TT_MEMBERS_INTERNAL_URL = os.environ.get('TT_MEMBERS_INTERNAL_URL', 'http://tt-members:5000')
     TT_AGENDA_INTERNAL_URL = os.environ.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
     TT_INFRA_INTERNAL_URL = os.environ.get('TT_INFRA_INTERNAL_URL', 'http://tt-infra:5000')
     SSO_SHARED_SECRET = os.environ.get('SSO_SHARED_SECRET') or SECRET_KEY
