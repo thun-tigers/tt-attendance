@@ -25,7 +25,24 @@ _WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
 def _build_auth_login_redirect():
     auth_base = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
     forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
-    scheme = forwarded_proto if forwarded_proto in ('http', 'https') else request.scheme
+    forwarded_header = request.headers.get('Forwarded') or ''
+    forwarded_proto_from_header = ''
+    if forwarded_header:
+        for part in forwarded_header.split(';'):
+            key, _, value = part.partition('=')
+            if key.strip().lower() == 'proto':
+                forwarded_proto_from_header = value.strip().strip('"').lower()
+                break
+
+    auth_scheme = urlparse(auth_base).scheme.lower()
+    scheme = forwarded_proto
+    if scheme not in ('http', 'https'):
+        scheme = forwarded_proto_from_header
+    if scheme not in ('http', 'https'):
+        scheme = auth_scheme
+    if scheme not in ('http', 'https'):
+        scheme = request.scheme
+
     full_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
     next_url = f'{scheme}://{request.host}{full_path}'
     return redirect(f'{auth_base}/auth/login?next={quote(next_url, safe="")}')
