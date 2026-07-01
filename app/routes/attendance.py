@@ -1,4 +1,4 @@
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote, urlencode, urljoin, urlparse
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash, make_response
 from ..extensions import db
@@ -22,8 +22,15 @@ bp = Blueprint('attendance', __name__)
 _WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
 
 
+def get_auth_login_url(next_page=None):
+    auth_base_url = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
+    query = {'next_service': 'tt-attendance'}
+    if next_page:
+        query['next'] = next_page
+    return f"{auth_base_url}/?{urlencode(query)}"
+
+
 def _build_auth_login_redirect():
-    auth_base = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
     forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
     forwarded_header = request.headers.get('Forwarded') or ''
     forwarded_proto_from_header = ''
@@ -34,6 +41,7 @@ def _build_auth_login_redirect():
                 forwarded_proto_from_header = value.strip().strip('"').lower()
                 break
 
+    auth_base = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
     auth_scheme = urlparse(auth_base).scheme.lower()
     scheme = forwarded_proto
     if scheme not in ('http', 'https'):
@@ -45,7 +53,12 @@ def _build_auth_login_redirect():
 
     full_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
     next_url = f'{scheme}://{request.host}{full_path}'
-    return redirect(f'{auth_base}/auth/login?next={quote(next_url, safe="")}')
+    return redirect(url_for('attendance.login', next=next_url))
+
+
+@bp.route('/login')
+def login():
+    return redirect(get_auth_login_url(request.args.get('next')))
 
 
 def _format_date_label(date_iso):
@@ -135,7 +148,7 @@ def index():
     """Main attendance page - show upcoming trainings with 3-button system."""
     current_user = get_current_user(request)
     if not current_user:
-        return _build_auth_login_redirect()
+        return redirect(url_for('attendance.login', next=request.full_path if request.query_string else request.path))
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
