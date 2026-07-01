@@ -1,4 +1,4 @@
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash, make_response
 from ..extensions import db
@@ -20,6 +20,15 @@ import requests
 bp = Blueprint('attendance', __name__)
 
 _WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
+
+
+def _build_auth_login_redirect():
+    auth_base = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
+    forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+    scheme = forwarded_proto if forwarded_proto in ('http', 'https') else request.scheme
+    full_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
+    next_url = f'{scheme}://{request.host}{full_path}'
+    return redirect(f'{auth_base}/auth/login?next={quote(next_url, safe="")}')
 
 
 def _format_date_label(date_iso):
@@ -109,7 +118,7 @@ def index():
     """Main attendance page - show upcoming trainings with 3-button system."""
     current_user = get_current_user(request)
     if not current_user:
-        return redirect(f'{current_app.config.get("AUTH_BASE_URL", "http://localhost:8085")}/auth/login?next={request.base_url}')
+        return _build_auth_login_redirect()
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
@@ -154,7 +163,7 @@ def coach_dashboard():
     """Coach overview of all training attendances."""
     current_user = get_current_user(request)
     if not current_user:
-        return redirect(f'{current_app.config.get("AUTH_BASE_URL", "http://localhost:8085")}/auth/login?next={request.base_url}')
+        return _build_auth_login_redirect()
 
     # Check if user has coach role
     is_coach = current_user.get('role') in ('admin', 'coach', 'head_coach')
