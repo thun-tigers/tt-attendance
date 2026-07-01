@@ -9,7 +9,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get('SQLALCHEMY_DATABASE_URI')
         or os.environ.get('DATABASE_URL')
-        or 'sqlite:///attendance.db'
+        or 'postgresql+psycopg://tt_attendance:tt_attendance_password@tt-postgres-attendance:5432/tt_attendance'
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()

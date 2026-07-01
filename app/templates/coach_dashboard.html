@@ -13,7 +13,7 @@
   {% if trainings %}
   <div class="space-y-3">
     {% for t in trainings %}
-    <a href="{{ url_for('attendance.coach_training_detail', training_id=t.id) }}"
+    <a href="{{ url_for('attendance.coach_training_detail', occurrence_id=t.id) }}"
        class="block rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition">
       <div class="flex items-center justify-between mb-3">
         <div>

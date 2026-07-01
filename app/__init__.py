@@ -36,6 +36,14 @@ def create_app(config_class=Config):
     def health():
         return {'status': 'ok', 'service': 'tt-attendance'}
 
+    @app.context_processor
+    def inject_template_globals():
+        auth_base_url = app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
+        return {
+            'auth_base_url': auth_base_url,
+            'auth_dashboard_url': f'{auth_base_url}/',
+        }
+
     with app.app_context():
         if app.config.get('AUTO_CREATE_DB', True):
             db.create_all()

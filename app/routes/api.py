@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from ..extensions import db
 from ..models import Attendance
-from ..jwt_utils import get_current_user, fetch_user_from_auth, create_sso_token
+from ..jwt_utils import get_current_user, fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
 import requests
 
 bp = Blueprint('api', __name__, url_prefix='/api')
@@ -22,14 +22,14 @@ def _error(message, status_code=400):
 
 # ===== Spieler-Endpunkte =====
 
-@bp.route('/trainings/<training_id>/attendance', methods=['GET', 'POST'])
-def handle_attendance(training_id):
-    """Set or get attendance status for a specific training."""
+@bp.route('/trainings/<occurrence_id>/attendance', methods=['GET', 'POST'])
+def handle_attendance(occurrence_id):
+    """Set or get attendance status for a specific training occurrence."""
     current_user = get_current_user(request)
 
     if request.method == 'GET':
         # Get all attendances for this training
-        attendances = Attendance.query.filter_by(training_id=training_id).all()
+        attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
         summary = {'attending': 0, 'maybe': 0, 'declined': 0}
 
         # Fetch user details from tt-auth
@@ -50,14 +50,14 @@ def handle_attendance(training_id):
         my_status = None
         if current_user:
             my_entry = Attendance.query.filter_by(
-                training_id=training_id,
+                training_id=occurrence_id,
                 user_id=current_user['id'],
             ).first()
             if my_entry:
                 my_status = my_entry.status
 
         return jsonify({
-            'training_id': training_id,
+            'training_id': occurrence_id,
             'summary': summary,
             'participants': participants,
             'my_status': my_status,
@@ -67,20 +67,21 @@ def handle_attendance(training_id):
     if not current_user:
         return _error('authentication_required', 401)
 
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    if training and training.get('is_cancelled'):
+        return _error('cancelled_training', 409)
+
     data = request.get_json(silent=True) or {}
     status = data.get('status')
-    reason = data.get('reason', '').strip() or None
+    raw_reason = data.get('reason')
+    reason = (raw_reason.strip() if isinstance(raw_reason, str) else None) or None
 
     if status not in ('attending', 'maybe', 'declined'):
         return _error('invalid_status', 400)
 
-    # Reason required for maybe and declined
-    if status in ('maybe', 'declined') and not reason:
-        return _error('reason_required_for_non_attending', 400)
-
     # Upsert
     attendance = Attendance.query.filter_by(
-        training_id=training_id,
+        training_id=occurrence_id,
         user_id=current_user['id'],
     ).first()
 
@@ -90,7 +91,7 @@ def handle_attendance(training_id):
         attendance.updated_at = datetime.now(timezone.utc)
     else:
         attendance = Attendance(
-            training_id=training_id,
+            training_id=occurrence_id,
             user_id=current_user['id'],
             status=status,
             reason=reason,
@@ -149,14 +150,14 @@ def my_attendances():
 
 # ===== Coach-Endpunkte =====
 
-@bp.route('/coach/trainings/<training_id>', methods=['GET'])
-def coach_training_detail(training_id):
+@bp.route('/coach/trainings/<occurrence_id>', methods=['GET'])
+def coach_training_detail(occurrence_id):
     """Coach view: detailed attendance list for a training."""
     current_user = get_current_user(request)
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
         return _error('forbidden', 403)
 
-    attendances = Attendance.query.filter_by(training_id=training_id).all()
+    attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
     summary = {'attending': 0, 'maybe': 0, 'declined': 0}
 
     groups = {'attending': [], 'maybe': [], 'declined': []}
@@ -177,7 +178,7 @@ def coach_training_detail(training_id):
         groups.setdefault(a.status, []).append(entry)
 
     return jsonify({
-        'training_id': training_id,
+        'training_id': occurrence_id,
         'summary': summary,
         'groups': groups,
         'total': len(attendances),
@@ -230,19 +231,19 @@ def coach_summary():
 
 # ===== Service-to-Service API (für tt-agenda Integration) =====
 
-@bp.route('/internal/training/<training_id>/counts', methods=['GET'])
-def internal_training_counts(training_id):
-    """Return attendance counts for a training (used by tt-agenda)."""
+@bp.route('/internal/training/<occurrence_id>/counts', methods=['GET'])
+def internal_training_counts(occurrence_id):
+    """Return attendance counts for a training occurrence (used by tt-agenda)."""
     if not _authorized():
         return _error('unauthorized', 401)
 
-    attendances = Attendance.query.filter_by(training_id=training_id).all()
+    attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
     summary = {'attending': 0, 'maybe': 0, 'declined': 0}
     for a in attendances:
         summary[a.status] = summary.get(a.status, 0) + 1
 
     return jsonify({
-        'training_id': training_id,
+        'training_id': occurrence_id,
         'summary': summary,
         'total': len(attendances),
     })

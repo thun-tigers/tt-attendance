@@ -9,7 +9,7 @@ class Attendance(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    training_id = db.Column(db.String(64), nullable=False, index=True)  # UUID from tt-agenda
+    training_id = db.Column(db.String(64), nullable=False, index=True)  # Training occurrence ID from tt-agenda
     user_id = db.Column(db.Integer, nullable=False, index=True)  # User ID from tt-auth
     status = db.Column(db.String(16), nullable=False, default='attending')  # attending, maybe, declined
     reason = db.Column(db.Text, nullable=True)

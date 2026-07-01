@@ -1,12 +1,107 @@
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify
+from urllib.parse import urljoin, urlparse
+
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash, make_response
 from ..extensions import db
 from ..models import Attendance
 from ..forms import AttendanceForm
-from ..jwt_utils import get_current_user, fetch_trainings_from_agenda, fetch_user_from_auth, create_sso_token
+from ..jwt_utils import (
+    get_current_user,
+    fetch_trainings_from_agenda_for_teams,
+    fetch_training_occurrence_from_agenda,
+    fetch_user_from_auth,
+    create_sso_token,
+    verify_sso_token,
+    generate_jwt,
+    set_jwt_cookie,
+)
 from datetime import datetime, timezone
 import requests
 
 bp = Blueprint('attendance', __name__)
+
+_WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
+
+
+def _format_date_label(date_iso):
+    if not date_iso:
+        return None
+    try:
+        dt = datetime.strptime(date_iso, '%Y-%m-%d')
+    except ValueError:
+        return date_iso
+    weekday = _WEEKDAY_SHORT[dt.weekday()]
+    return f'{weekday} {dt.strftime("%d.%m.%Y")}'
+
+
+def _is_safe_url(target):
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+
+def _visible_team_codes(current_user):
+    if not current_user:
+        return []
+    permissions = current_user.get('permissions') or []
+    if current_user.get('role') == 'admin' or '*' in permissions:
+        return []
+
+    memberships = current_user.get('memberships') or []
+    team_codes = []
+    for membership in memberships:
+        if not isinstance(membership, dict):
+            continue
+        if membership.get('is_active') is False:
+            continue
+        team_code = (membership.get('team_code') or '').strip().upper()
+        if team_code and team_code not in team_codes:
+            team_codes.append(team_code)
+    return team_codes
+
+
+@bp.route('/auth/sso')
+def sso_login():
+    token = (request.args.get('token') or '').strip()
+    if not token:
+        flash('SSO-Token fehlt.', 'danger')
+        return redirect(url_for('attendance.index'))
+
+    payload = verify_sso_token(token)
+    if not payload:
+        flash('Ungültiger SSO-Token.', 'danger')
+        return redirect(url_for('attendance.index'))
+
+    claims = payload.get('claims') or payload
+    username = (payload.get('username') or claims.get('username') or '').strip()
+    if not username:
+        flash('SSO-Token enthält keinen Benutzernamen.', 'danger')
+        return redirect(url_for('attendance.index'))
+
+    local_user = {
+        'id': int(payload.get('sub') or claims.get('sub')),
+        'username': username,
+        'role': payload.get('service_role') or payload.get('role') or payload.get('platform_role') or 'user',
+        'display_name': payload.get('display_name') or claims.get('display_name') or username,
+        'memberships': payload.get('memberships') or claims.get('memberships') or [],
+        'permissions': payload.get('permissions') or claims.get('permissions') or [],
+        'teams': payload.get('teams') or claims.get('teams') or [],
+        'member_roles': payload.get('member_roles') or claims.get('member_roles') or [],
+    }
+
+    next_page = request.args.get('next')
+    target = next_page if next_page and _is_safe_url(next_page) else url_for('attendance.index')
+    response = make_response(redirect(target))
+    set_jwt_cookie(
+        response,
+        generate_jwt(
+            local_user,
+            memberships=local_user['memberships'],
+            permissions=local_user['permissions'],
+        ),
+    )
+    return response
 
 
 @bp.route('/')
@@ -17,7 +112,7 @@ def index():
         return redirect(f'{current_app.config.get("AUTH_BASE_URL", "http://localhost:8085")}/auth/login?next={request.base_url}')
 
     # Fetch trainings from tt-agenda
-    trainings = fetch_trainings_from_agenda()
+    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
 
     # Get user's existing attendances
     my_attendances = {
@@ -34,9 +129,14 @@ def index():
         trainings_with_status.append({
             'id': aid,
             'title': t.get('title', 'Training'),
+            'team_code': t.get('team_code'),
             'date': t.get('date'),
+            'date_label': _format_date_label(t.get('date')),
             'time': t.get('time'),
+            'start_time': t.get('start_time'),
+            'end_time': t.get('end_time'),
             'location': t.get('location'),
+            'is_cancelled': bool(t.get('is_cancelled', False)),
             'my_status': status,
             'my_reason': reason,
         })
@@ -62,22 +162,7 @@ def coach_dashboard():
         return redirect(url_for('attendance.index'))
 
     # Fetch trainings with attendance counts
-    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
-    trainings = []
-    try:
-        sso_token = create_sso_token()
-        resp = requests.get(
-            f'{agenda_url}/api/trainings',
-            headers={
-                'Authorization': f'Bearer {sso_token}',
-                'X-TT-Internal-Secret': current_app.config.get('INTERNAL_API_SECRET'),
-            },
-            timeout=5,
-        )
-        if resp.status_code == 200:
-            trainings = resp.json().get('trainings', [])
-    except requests.RequestException:
-        pass
+    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
 
     # Build summary per training
     training_summaries = []
@@ -91,6 +176,7 @@ def coach_dashboard():
         training_summaries.append({
             'id': tid,
             'title': t.get('title', 'Training'),
+            'team_code': t.get('team_code'),
             'date': t.get('date'),
             'time': t.get('time'),
             'summary': summary,
@@ -106,8 +192,8 @@ def coach_dashboard():
     )
 
 
-@bp.route('/coach/training/<training_id>')
-def coach_training_detail(training_id):
+@bp.route('/coach/training/<occurrence_id>')
+def coach_training_detail(occurrence_id):
     """Detailed view of one training's attendance for coaches."""
     current_user = get_current_user(request)
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
@@ -119,7 +205,7 @@ def coach_training_detail(training_id):
     try:
         sso_token = create_sso_token()
         resp = requests.get(
-            f'{agenda_url}/api/trainings/{training_id}',
+            f'{agenda_url}/api/trainings/{occurrence_id}',
             headers={
                 'Authorization': f'Bearer {sso_token}',
                 'X-TT-Internal-Secret': current_app.config.get('INTERNAL_API_SECRET'),
@@ -132,7 +218,7 @@ def coach_training_detail(training_id):
         pass
 
     # Get attendances with user details
-    attendances = Attendance.query.filter_by(training_id=training_id).all()
+    attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
 
     groups = {'attending': [], 'maybe': [], 'declined': []}
     for a in attendances:
@@ -159,25 +245,27 @@ def coach_training_detail(training_id):
     )
 
 
-@bp.route('/api/trainings/<training_id}/set-status', methods=['POST'])
-def set_status_api(training_id):
+@bp.route('/api/trainings/<occurrence_id>/set-status', methods=['POST'])
+def set_status_api(occurrence_id):
     """API endpoint for the 3-button system (AJAX)."""
     current_user = get_current_user(request)
     if not current_user:
         return jsonify({'error': 'unauthorized'}), 401
 
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    if training and training.get('is_cancelled'):
+        return jsonify({'error': 'cancelled_training'}), 409
+
     data = request.get_json(silent=True) or {}
     status = data.get('status')
-    reason = data.get('reason', '').strip() or None
+    raw_reason = data.get('reason')
+    reason = (raw_reason.strip() if isinstance(raw_reason, str) else None) or None
 
     if status not in ('attending', 'maybe', 'declined'):
         return jsonify({'error': 'invalid_status'}), 400
 
-    if status in ('maybe', 'declined') and not reason:
-        return jsonify({'error': 'Bitte gib einen Grund an.'}), 400
-
     attendance = Attendance.query.filter_by(
-        training_id=training_id,
+        training_id=occurrence_id,
         user_id=current_user['id'],
     ).first()
 
@@ -187,7 +275,7 @@ def set_status_api(training_id):
         attendance.updated_at = datetime.now(timezone.utc)
     else:
         attendance = Attendance(
-            training_id=training_id,
+            training_id=occurrence_id,
             user_id=current_user['id'],
             status=status,
             reason=reason,
@@ -197,7 +285,7 @@ def set_status_api(training_id):
     db.session.commit()
 
     # Get updated summary
-    all_attendances = Attendance.query.filter_by(training_id=training_id).all()
+    all_attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
     summary = {'attending': 0, 'maybe': 0, 'declined': 0}
     for a in all_attendances:
         summary[a.status] = summary.get(a.status, 0) + 1

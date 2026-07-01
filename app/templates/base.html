@@ -63,31 +63,48 @@
 <!-- ===== App Bar ===== -->
 <header class="sticky top-0 z-40 border-b border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-900/85 glass">
   <div class="flex items-center gap-3 px-4 h-14 max-w-7xl mx-auto">
-    <a href="https://github.com/thun-tigers" target="_blank" class="h-10 w-10 shrink-0 rounded-lg overflow-hidden bg-white ring-1 ring-slate-200 dark:ring-slate-500 shadow-sm">
+    <a href="{{ auth_dashboard_url }}" class="h-10 w-10 shrink-0 rounded-lg overflow-hidden bg-white ring-1 ring-slate-200 dark:ring-slate-500 shadow-sm">
       <img src="{{ url_for('static', filename='tt-logo.png') }}" alt="TT" class="w-full h-full object-contain p-0.5">
     </a>
     <div class="min-w-0">
       <div class="text-[0.6rem] font-bold uppercase tracking-[0.22em] text-indigo-500 dark:text-indigo-300 leading-none">Thun Tigers</div>
       <div class="flex items-center gap-1.5">
         <i class="bi bi-calendar-check text-sm text-indigo-600 dark:text-indigo-400"></i>
-        <span class="text-sm font-bold leading-tight truncate">Anmeldung</span>
+        <span class="text-sm font-bold leading-tight truncate">Attendance</span>
       </div>
     </div>
-    <div class="ml-auto flex items-center gap-1.5">
+    <div class="hidden lg:flex items-center gap-1 ml-auto mr-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50 p-1">
+      {% set ep = request.endpoint %}
+      <a href="{{ url_for('attendance.index') }}" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition
+        {{ 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900' if ep == 'attendance.index' else 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900' }}">
+        <i class="bi bi-hand-thumbs-up-fill"></i>Anmeldung
+      </a>
+      {% if current_user.role in ('admin', 'coach', 'head_coach') %}
+      <a href="{{ url_for('attendance.coach_dashboard') }}" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition
+        {{ 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900' if ep.startswith('attendance.coach') else 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900' }}">
+        <i class="bi bi-clipboard-data-fill"></i>Coach
+      </a>
+      {% endif %}
+    </div>
+    <div class="ml-auto lg:ml-0 flex items-center gap-1.5">
+      <a href="{{ auth_dashboard_url }}" class="hidden lg:inline-flex h-8 w-8 grid place-items-center rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Apps">
+        <i class="bi bi-grid-fill"></i>
+      </a>
       <button id="themeToggle" class="h-8 w-8 grid place-items-center rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Design-Modus">
         <i class="bi bi-moon-fill" id="themeIcon"></i>
       </button>
-      <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-600">
-        <a href="{{ url_for('attendance.index') }}" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-          <div class="hidden sm:block text-right">
-            <div class="text-xs font-semibold leading-tight">{{ current_user.display_name or current_user.username }}</div>
-            <div class="text-[10px] text-indigo-500 dark:text-indigo-400 capitalize leading-tight">{{ current_user.role }}</div>
-          </div>
-          <div class="h-8 w-8 rounded-full bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-bold text-xs">
-            {{ (current_user.display_name or current_user.username)[0].upper() }}
-          </div>
-        </a>
-      </div>
+      <a href="{{ auth_dashboard_url }}profile" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+        <div class="hidden sm:block text-right">
+          <div class="text-xs font-semibold leading-tight">{{ current_user.display_name or current_user.username }}</div>
+          <div class="text-[10px] text-indigo-500 dark:text-indigo-400 capitalize leading-tight">{{ current_user.role }}</div>
+        </div>
+        <div class="h-8 w-8 rounded-full bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-bold text-xs">
+          {{ (current_user.display_name or current_user.username)[0].upper() }}
+        </div>
+      </a>
+      <a href="{{ auth_base_url }}/logout" class="h-8 w-8 grid place-items-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition" title="Abmelden">
+        <i class="bi bi-box-arrow-right"></i>
+      </a>
     </div>
   </div>
 </header>
@@ -130,7 +147,7 @@
       <span class="text-[10px] font-semibold">Coach</span>
     </a>
     {% endif %}
-    <a href="{{ current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085') + '/dashboard/profile' }}" class="flex flex-col items-center gap-0.5 py-3 transition text-slate-400">
+    <a href="{{ auth_base_url }}/dashboard/profile" class="flex flex-col items-center gap-0.5 py-3 transition text-slate-400">
       <i class="bi bi-person text-lg"></i>
       <span class="text-[10px] font-semibold">Profil</span>
     </a>
