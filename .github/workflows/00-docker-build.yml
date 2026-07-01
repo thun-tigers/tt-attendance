@@ -1,27 +1,33 @@
-name: Docker Build
+name: Container Image
 
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Additional image tag to publish
+        required: false
+        default: ''
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: thun-tigers/tt-attendance
+  IMAGE_NAME: ${{ github.repository_owner }}/${{ github.event.repository.name }}
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -30,20 +36,72 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          image="${REGISTRY}/${IMAGE_NAME}"
+          version="$(tr -d '[:space:]' < VERSION)"
+
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must match MAJOR.MINOR.PATCH, got: ${version}" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]] && [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Git tag ${GITHUB_REF_NAME} does not match VERSION ${version}" >&2
+            exit 1
+          fi
+
+          tags=("${image}:sha-${short_sha}")
+
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            tags+=("${image}:beta")
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/}"
+            tags+=("${image}:${version}" "${image}:latest")
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            manual_tag="$(echo "${{ github.event.inputs.image_tag }}" | tr '[:upper:]' '[:lower:]')"
+            tags+=("${image}:${manual_tag}")
+          fi
+
+          {
+            echo "tags<<EOF"
+            printf '%s\n' "${tags[@]}"
+            echo "EOF"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Image summary
+        shell: bash
+        run: |
+          echo "## Published image tags" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r tag; do
+            echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "${{ steps.tags.outputs.tags }}"
