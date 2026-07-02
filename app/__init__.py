@@ -20,7 +20,6 @@ def create_app(config_class=Config):
     app.config.setdefault('SESSION_COOKIE_SECURE', True)
     app.config.setdefault('SESSION_COOKIE_HTTPONLY', True)
     app.config.setdefault('SESSION_COOKIE_SAMESITE', 'Lax')
-    app.config.setdefault('SESSION_COOKIE_DOMAIN', '.thun-tigers.net')
 
     # Logging
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO').upper(), logging.INFO)
