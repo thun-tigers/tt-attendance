@@ -17,6 +17,7 @@ class Config:
 
     # SSO / Auth
     AUTH_BASE_URL = os.environ.get('AUTH_BASE_URL', 'http://localhost:8085')
+    JWT_COOKIE_SECURE = os.environ.get('JWT_COOKIE_SECURE', 'true').lower() in ('true', '1', 'yes')
     TT_AUTH_INTERNAL_URL = os.environ.get('TT_AUTH_INTERNAL_URL', 'http://tt-auth:5000')
     TT_AGENDA_INTERNAL_URL = os.environ.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
     TT_INFRA_INTERNAL_URL = os.environ.get('TT_INFRA_INTERNAL_URL', 'http://tt-infra:5000')
