@@ -15,12 +15,6 @@ def create_app(config_class=Config):
         else:
             raise RuntimeError('SECRET_KEY must be set in production.')
 
-    # Flask session config
-    app.config.setdefault('SESSION_COOKIE_NAME', 'attendance_session')
-    app.config.setdefault('SESSION_COOKIE_SECURE', True)
-    app.config.setdefault('SESSION_COOKIE_HTTPONLY', True)
-    app.config.setdefault('SESSION_COOKIE_SAMESITE', 'Lax')
-
     # Logging
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO').upper(), logging.INFO)
     logging.basicConfig(level=log_level)
