@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 
 from ..extensions import db
 from ..models import Attendance
-from ..jwt_utils import get_current_user, fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
+from ..jwt_utils import fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
+from .auth import get_current_user
 import requests
 
 bp = Blueprint('api', __name__, url_prefix='/api')
@@ -25,7 +26,7 @@ def _error(message, status_code=400):
 @bp.route('/trainings/<occurrence_id>/attendance', methods=['GET', 'POST'])
 def handle_attendance(occurrence_id):
     """Set or get attendance status for a specific training occurrence."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
 
     if request.method == 'GET':
         # Get all attendances for this training
@@ -105,7 +106,7 @@ def handle_attendance(occurrence_id):
 @bp.route('/me/attendances', methods=['GET'])
 def my_attendances():
     """Get all attendances for the current user."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
         return _error('authentication_required', 401)
 
@@ -153,7 +154,7 @@ def my_attendances():
 @bp.route('/coach/trainings/<occurrence_id>', methods=['GET'])
 def coach_training_detail(occurrence_id):
     """Coach view: detailed attendance list for a training."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
         return _error('forbidden', 403)
 
@@ -188,7 +189,7 @@ def coach_training_detail(occurrence_id):
 @bp.route('/coach/summary', methods=['GET'])
 def coach_summary():
     """Get attendance summary across all upcoming trainings."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
         return _error('forbidden', 403)
 

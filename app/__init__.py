@@ -15,6 +15,13 @@ def create_app(config_class=Config):
         else:
             raise RuntimeError('SECRET_KEY must be set in production.')
 
+    # Flask session config
+    app.config.setdefault('SESSION_COOKIE_NAME', 'attendance_session')
+    app.config.setdefault('SESSION_COOKIE_SECURE', True)
+    app.config.setdefault('SESSION_COOKIE_HTTPONLY', True)
+    app.config.setdefault('SESSION_COOKIE_SAMESITE', 'Lax')
+    app.config.setdefault('SESSION_COOKIE_DOMAIN', '.thun-tigers.net')
+
     # Logging
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO').upper(), logging.INFO)
     logging.basicConfig(level=log_level)
@@ -25,9 +32,11 @@ def create_app(config_class=Config):
     limiter.init_app(app)
 
     # Blueprints
+    from .routes.auth import bp as auth_bp
     from .routes.attendance import bp as attendance_bp
     from .routes.api import bp as api_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(attendance_bp)
     app.register_blueprint(api_bp)
 

@@ -1,64 +1,21 @@
-from urllib.parse import quote, urlencode, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash, make_response
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash
 from ..extensions import db
 from ..models import Attendance
 from ..forms import AttendanceForm
 from ..jwt_utils import (
-    get_current_user,
     fetch_trainings_from_agenda_for_teams,
     fetch_training_occurrence_from_agenda,
     fetch_user_from_auth,
-    create_sso_token,
-    verify_sso_token,
-    generate_jwt,
-    set_jwt_cookie,
 )
+from .auth import get_current_user
 from datetime import datetime, timezone
 import requests
 
 bp = Blueprint('attendance', __name__)
 
 _WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
-
-
-def get_auth_login_url(next_page=None):
-    auth_base_url = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
-    query = {'next_service': 'tt-attendance'}
-    if next_page:
-        query['next'] = next_page
-    return f"{auth_base_url}/?{urlencode(query)}"
-
-
-def _build_auth_login_redirect():
-    forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
-    forwarded_header = request.headers.get('Forwarded') or ''
-    forwarded_proto_from_header = ''
-    if forwarded_header:
-        for part in forwarded_header.split(';'):
-            key, _, value = part.partition('=')
-            if key.strip().lower() == 'proto':
-                forwarded_proto_from_header = value.strip().strip('"').lower()
-                break
-
-    auth_base = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
-    auth_scheme = urlparse(auth_base).scheme.lower()
-    scheme = forwarded_proto
-    if scheme not in ('http', 'https'):
-        scheme = forwarded_proto_from_header
-    if scheme not in ('http', 'https'):
-        scheme = auth_scheme
-    if scheme not in ('http', 'https'):
-        scheme = request.scheme
-
-    full_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
-    next_url = f'{scheme}://{request.host}{full_path}'
-    return redirect(url_for('attendance.login', next=next_url))
-
-
-@bp.route('/login')
-def login():
-    return redirect(get_auth_login_url(request.args.get('next')))
 
 
 def _format_date_label(date_iso):
@@ -70,14 +27,6 @@ def _format_date_label(date_iso):
         return date_iso
     weekday = _WEEKDAY_SHORT[dt.weekday()]
     return f'{weekday} {dt.strftime("%d.%m.%Y")}'
-
-
-def _is_safe_url(target):
-    if not target:
-        return False
-    ref_url = urlparse(request.host_url)
-    test_url = urlparse(urljoin(request.host_url, target))
-    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 
 def _visible_team_codes(current_user):
@@ -100,55 +49,14 @@ def _visible_team_codes(current_user):
     return team_codes
 
 
-@bp.route('/auth/sso')
-def sso_login():
-    token = (request.args.get('token') or '').strip()
-    if not token:
-        flash('SSO-Token fehlt.', 'danger')
-        return redirect(url_for('attendance.index'))
-
-    payload = verify_sso_token(token)
-    if not payload:
-        flash('Ungültiger SSO-Token.', 'danger')
-        return redirect(url_for('attendance.index'))
-
-    claims = payload.get('claims') or payload
-    username = (payload.get('username') or claims.get('username') or '').strip()
-    if not username:
-        flash('SSO-Token enthält keinen Benutzernamen.', 'danger')
-        return redirect(url_for('attendance.index'))
-
-    local_user = {
-        'id': int(payload.get('sub') or claims.get('sub')),
-        'username': username,
-        'role': payload.get('service_role') or payload.get('role') or payload.get('platform_role') or 'user',
-        'display_name': payload.get('display_name') or claims.get('display_name') or username,
-        'memberships': payload.get('memberships') or claims.get('memberships') or [],
-        'permissions': payload.get('permissions') or claims.get('permissions') or [],
-        'teams': payload.get('teams') or claims.get('teams') or [],
-        'member_roles': payload.get('member_roles') or claims.get('member_roles') or [],
-    }
-
-    next_page = request.args.get('next')
-    target = next_page if next_page and _is_safe_url(next_page) else url_for('attendance.index')
-    response = make_response(redirect(target))
-    set_jwt_cookie(
-        response,
-        generate_jwt(
-            local_user,
-            memberships=local_user['memberships'],
-            permissions=local_user['permissions'],
-        ),
-    )
-    return response
-
-
 @bp.route('/')
 def index():
     """Main attendance page - show upcoming trainings with 3-button system."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
-        return redirect(url_for('attendance.login', next=request.full_path if request.query_string else request.path))
+        from flask import session as flask_session
+        flask_session['next_after_login'] = request.url
+        return redirect(url_for('auth.login', next=request.full_path if request.query_string else request.path))
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
@@ -191,9 +99,9 @@ def index():
 @bp.route('/coach')
 def coach_dashboard():
     """Coach overview of all training attendances."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
-        return _build_auth_login_redirect()
+        return redirect(url_for('auth.login'))
 
     # Check if user has coach role
     is_coach = current_user.get('role') in ('admin', 'coach', 'head_coach')
@@ -234,7 +142,7 @@ def coach_dashboard():
 @bp.route('/coach/training/<occurrence_id>')
 def coach_training_detail(occurrence_id):
     """Detailed view of one training's attendance for coaches."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
         return redirect(url_for('attendance.index'))
 
@@ -242,11 +150,11 @@ def coach_training_detail(occurrence_id):
     agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
     training = {}
     try:
-        sso_token = create_sso_token()
+        from ..jwt_utils import create_sso_token
         resp = requests.get(
             f'{agenda_url}/api/trainings/{occurrence_id}',
             headers={
-                'Authorization': f'Bearer {sso_token}',
+                'Authorization': f'Bearer {create_sso_token()}',
                 'X-TT-Internal-Secret': current_app.config.get('INTERNAL_API_SECRET'),
             },
             timeout=5,
@@ -287,7 +195,7 @@ def coach_training_detail(occurrence_id):
 @bp.route('/api/trainings/<occurrence_id>/set-status', methods=['POST'])
 def set_status_api(occurrence_id):
     """API endpoint for the 3-button system (AJAX)."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
         return jsonify({'error': 'unauthorized'}), 401
 
