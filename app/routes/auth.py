@@ -10,6 +10,14 @@ from ..models import User
 bp = Blueprint('auth', __name__)
 
 
+def _merge_claims(*sources):
+    claims = {}
+    for source in sources:
+        if isinstance(source, dict):
+            claims.update(source)
+    return claims
+
+
 def get_auth_login_url(next_page=None):
     auth_base_url = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
     query = {'next_service': 'tt-attendance'}
@@ -27,7 +35,8 @@ def get_current_user():
     if not user:
         session.clear()
         return None
-    claims = user.claims_json or {}
+    session_claims = session.get('claims_json')
+    claims = _merge_claims(user.claims_json or {}, session_claims or {})
     return {
         'id': user.auth_user_id,
         'username': user.username,
@@ -37,6 +46,7 @@ def get_current_user():
         'permissions': claims.get('permissions') or [],
         'teams': claims.get('teams') or [],
         'member_roles': claims.get('member_roles') or [],
+        'claims_json': claims,
     }
 
 

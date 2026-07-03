@@ -36,7 +36,8 @@ def _visible_team_codes(current_user):
     if current_user.get('role') == 'admin' or '*' in permissions:
         return []
 
-    memberships = current_user.get('memberships') or []
+    claims = current_user.get('claims_json') or {}
+    memberships = claims.get('memberships') or current_user.get('memberships') or []
     team_codes = []
     for membership in memberships:
         if not isinstance(membership, dict):
@@ -46,7 +47,18 @@ def _visible_team_codes(current_user):
         team_code = (membership.get('team_code') or '').strip().upper()
         if team_code and team_code not in team_codes:
             team_codes.append(team_code)
-    return team_codes
+
+    if team_codes:
+        return team_codes
+
+    fallback_codes = []
+    for team_code in claims.get('teams') or current_user.get('teams') or []:
+        if not isinstance(team_code, str):
+            continue
+        code = team_code.strip().upper()
+        if code and code not in fallback_codes:
+            fallback_codes.append(code)
+    return fallback_codes
 
 
 @bp.route('/')

@@ -70,8 +70,17 @@ def fetch_trainings_from_agenda_for_teams(team_codes=None):
         )
         if resp.status_code == 200:
             return resp.json().get('trainings', [])
+        current_app.logger.warning(
+            'tt-agenda trainings fetch failed with status %s for teams=%s',
+            resp.status_code,
+            params.get('teams') if params else None,
+        )
     except requests.RequestException:
-        pass
+        current_app.logger.warning(
+            'tt-agenda trainings fetch failed for teams=%s',
+            params.get('teams') if params else None,
+            exc_info=True,
+        )
     return []
 
 
@@ -97,6 +106,17 @@ def fetch_training_occurrence_from_agenda(occurrence_id, team_codes=None):
         )
         if resp.status_code == 200:
             return resp.json()
+        current_app.logger.warning(
+            'tt-agenda training detail fetch failed with status %s for occurrence_id=%s teams=%s',
+            resp.status_code,
+            occurrence_id,
+            params.get('teams') if params else None,
+        )
     except requests.RequestException:
-        pass
+        current_app.logger.warning(
+            'tt-agenda training detail fetch failed for occurrence_id=%s teams=%s',
+            occurrence_id,
+            params.get('teams') if params else None,
+            exc_info=True,
+        )
     return None
