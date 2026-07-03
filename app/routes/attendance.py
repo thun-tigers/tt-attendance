@@ -1,17 +1,13 @@
-from urllib.parse import urlencode, urljoin, urlparse
-
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash, session
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify
 from ..extensions import db
 from ..models import Attendance
-from ..forms import AttendanceForm
 from ..jwt_utils import (
-    get_current_user,
     fetch_trainings_from_agenda_for_teams,
     fetch_training_occurrence_from_agenda,
     fetch_user_from_auth,
     create_sso_token,
-    verify_sso_token,
 )
+from .auth import get_auth_login_url, get_current_user
 from datetime import datetime, timezone
 import requests
 
@@ -31,14 +27,6 @@ def _format_date_label(date_iso):
     return f'{weekday} {dt.strftime("%d.%m.%Y")}'
 
 
-def _is_safe_url(target):
-    if not target:
-        return False
-    ref_url = urlparse(request.host_url)
-    test_url = urlparse(urljoin(request.host_url, target))
-    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
-
-
 def _visible_team_codes(current_user):
     if not current_user:
         return []
@@ -46,7 +34,10 @@ def _visible_team_codes(current_user):
     if current_user.get('role') == 'admin' or '*' in permissions:
         return []
 
-    memberships = current_user.get('memberships') or []
+    claims = current_user.get('claims_json') or {}
+    memberships = claims.get('memberships')
+    if not memberships:
+        memberships = current_user.get('memberships') or []
     team_codes = []
     for membership in memberships:
         if not isinstance(membership, dict):
@@ -56,21 +47,22 @@ def _visible_team_codes(current_user):
         team_code = (membership.get('team_code') or '').strip().upper()
         if team_code and team_code not in team_codes:
             team_codes.append(team_code)
-    return team_codes
 
+    if team_codes:
+        return team_codes
 
-def _auth_login_url(next_page):
-    auth_base_url = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
-    query = {'next_service': 'tt-attendance'}
-    if next_page:
-        query['next'] = next_page
-    return f"{auth_base_url}/?{urlencode(query)}"
+    teams = claims.get('teams')
+    if not teams:
+        teams = current_user.get('teams') or []
 
-
-@bp.route('/login')
-def login():
-    next_page = request.args.get('next')
-    return redirect(_auth_login_url(next_page or url_for('attendance.index')))
+    fallback_codes = []
+    for team_code in teams:
+        if not isinstance(team_code, str):
+            continue
+        code = team_code.strip().upper()
+        if code and code not in fallback_codes:
+            fallback_codes.append(code)
+    return fallback_codes
 
 
 def _fetch_active_member_count(team_code):
@@ -88,7 +80,8 @@ def _fetch_active_member_count(team_code):
         )
         if response.status_code == 200:
             payload = response.json() or {}
-            return int(payload.get('active_player_count', payload.get('active_member_count', 0)))
+            count = payload.get('active_player_count') if 'active_player_count' in payload else payload.get('active_member_count', 0)
+            return int(count)
     except (requests.RequestException, TypeError, ValueError):
         pass
     return None
@@ -485,56 +478,12 @@ def _is_player_for_team(user_info, team_code):
     return False
 
 
-@bp.route('/auth/sso')
-def sso_login():
-    token = (request.args.get('token') or '').strip()
-    if not token:
-        flash('SSO-Token fehlt.', 'danger')
-        return redirect(url_for('attendance.index'))
-
-    payload = verify_sso_token(token)
-    if not payload:
-        flash('Ungültiger SSO-Token.', 'danger')
-        return redirect(url_for('attendance.index'))
-
-    claims = payload.get('claims') or payload
-    username = (payload.get('username') or claims.get('username') or '').strip()
-    if not username:
-        flash('SSO-Token enthält keinen Benutzernamen.', 'danger')
-        return redirect(url_for('attendance.index'))
-
-    current_user = {
-        'id': int(payload.get('sub') or claims.get('sub')),
-        'username': username,
-        'role': payload.get('service_role') or payload.get('role') or payload.get('platform_role') or 'user',
-        'display_name': payload.get('display_name') or claims.get('display_name') or username,
-        'memberships': payload.get('memberships') or claims.get('memberships') or [],
-        'permissions': payload.get('permissions') or claims.get('permissions') or [],
-        'teams': payload.get('teams') or claims.get('teams') or [],
-        'member_roles': payload.get('member_roles') or claims.get('member_roles') or [],
-    }
-
-    next_page = request.args.get('next')
-    target = next_page if next_page and _is_safe_url(next_page) else url_for('attendance.index')
-    session['current_user'] = current_user
-    session['user_id'] = current_user['id']
-    session['username'] = current_user['username']
-    session['user_role'] = current_user['role']
-    session['platform_role'] = current_user['role']
-    session['display_name'] = current_user['display_name']
-    session['memberships'] = current_user['memberships']
-    session['permissions'] = current_user['permissions']
-    session['teams'] = current_user['teams']
-    session['member_roles'] = current_user['member_roles']
-    return redirect(target)
-
-
 @bp.route('/')
 def index():
     """Main attendance page - show upcoming trainings with 3-button system."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
-        return redirect(_auth_login_url(request.base_url))
+        return redirect(get_auth_login_url(request.base_url))
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
@@ -577,9 +526,9 @@ def index():
 @bp.route('/coach')
 def coach_dashboard():
     """Coach overview of all training attendances."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
-        return redirect(_auth_login_url(request.base_url))
+        return redirect(get_auth_login_url(request.base_url))
 
     # Check if user has coach role
     is_coach = current_user.get('role') in ('admin', 'coach', 'head_coach', 'team_betreuer')
@@ -631,7 +580,7 @@ def coach_dashboard():
 @bp.route('/coach/training/<occurrence_id>')
 def coach_training_detail(occurrence_id):
     """Detailed view of one training's attendance for coaches."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach', 'team_betreuer'):
         return redirect(url_for('attendance.index'))
 
@@ -680,7 +629,7 @@ def coach_training_detail(occurrence_id):
 @bp.route('/api/trainings/<occurrence_id>/set-status', methods=['POST'])
 def set_status_api(occurrence_id):
     """API endpoint for the 3-button system (AJAX)."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
         return jsonify({'error': 'unauthorized'}), 401
 
@@ -731,7 +680,7 @@ def set_status_api(occurrence_id):
 
 @bp.route('/api/coach/trainings/<occurrence_id>/participants/<int:user_id>/status', methods=['POST'])
 def coach_set_participant_status(occurrence_id, user_id):
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
         return jsonify({'error': 'unauthorized'}), 401
 

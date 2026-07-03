@@ -30,7 +30,7 @@ def test_team_betreuer_can_open_coach_dashboard(client, monkeypatch):
     monkeypatch.setattr(
         attendance_routes,
         'get_current_user',
-        lambda request: {'id': 1, 'role': 'team_betreuer', 'username': 'betreuer-user', 'display_name': 'Betreuer User'},
+        lambda: {'id': 1, 'role': 'team_betreuer', 'username': 'betreuer-user', 'display_name': 'Betreuer User'},
     )
     monkeypatch.setattr(attendance_routes, 'fetch_trainings_from_agenda_for_teams', lambda team_codes=None: [])
 
@@ -43,7 +43,7 @@ def test_team_betreuer_can_open_coach_dashboard(client, monkeypatch):
 def test_attendance_summary_includes_open_count(client, monkeypatch):
     import app.routes.api as attendance_api
 
-    monkeypatch.setattr(attendance_api, 'get_current_user', lambda request: {'id': 1, 'role': 'user'})
+    monkeypatch.setattr(attendance_api, 'get_current_user', lambda: {'id': 1, 'role': 'user'})
     monkeypatch.setattr(
         attendance_api,
         'fetch_training_occurrence_from_agenda',
@@ -71,7 +71,7 @@ def test_coach_dashboard_renders_open_count(client, app, monkeypatch):
     monkeypatch.setattr(
         attendance_routes,
         'get_current_user',
-        lambda request: {'id': 1, 'role': 'coach', 'username': 'coach-user', 'display_name': 'Coach User'},
+        lambda: {'id': 1, 'role': 'coach', 'username': 'coach-user', 'display_name': 'Coach User'},
     )
     monkeypatch.setattr(
         attendance_routes,
@@ -134,7 +134,7 @@ def test_coach_detail_renders_participant_rows(client, app, monkeypatch):
     monkeypatch.setattr(
         attendance_routes,
         'get_current_user',
-        lambda request: {'id': 1, 'role': 'coach', 'username': 'coach-user', 'display_name': 'Coach User'},
+        lambda: {'id': 1, 'role': 'coach', 'username': 'coach-user', 'display_name': 'Coach User'},
     )
     monkeypatch.setattr(
         attendance_routes,
@@ -194,7 +194,7 @@ def test_coach_can_set_participant_status(client, app, monkeypatch):
     monkeypatch.setattr(
         attendance_routes,
         'get_current_user',
-        lambda request: {
+        lambda: {
             'id': 1,
             'role': 'coach',
             'username': 'coach-user',

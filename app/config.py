@@ -15,6 +15,10 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
     AUTO_CREATE_DB = os.environ.get('AUTO_CREATE_DB', 'true').lower() == 'true'
+    SESSION_COOKIE_NAME = os.environ.get('SESSION_COOKIE_NAME', 'attendance_session')
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
+    SESSION_COOKIE_HTTPONLY = os.environ.get('SESSION_COOKIE_HTTPONLY', 'true').lower() == 'true'
+    SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
 
     # SSO / Auth
     AUTH_BASE_URL = os.environ.get('AUTH_BASE_URL', 'http://localhost:8085')

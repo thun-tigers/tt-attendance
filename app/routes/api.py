@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 
 from ..extensions import db
 from ..models import Attendance
-from ..jwt_utils import get_current_user, fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
+from ..jwt_utils import fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
+from .auth import get_current_user
 import requests
 
 bp = Blueprint('api', __name__, url_prefix='/api')
@@ -35,7 +36,8 @@ def _fetch_active_member_count(team_code):
         )
         if response.status_code == 200:
             payload = response.json() or {}
-            return int(payload.get('active_member_count', 0))
+            count = payload.get('active_player_count') if 'active_player_count' in payload else payload.get('active_member_count', 0)
+            return int(count)
     except (requests.RequestException, TypeError, ValueError):
         pass
     return None
@@ -62,7 +64,7 @@ def _build_summary(occurrence_id, training=None):
 @bp.route('/trainings/<occurrence_id>/attendance', methods=['GET', 'POST'])
 def handle_attendance(occurrence_id):
     """Set or get attendance status for a specific training occurrence."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
 
     if request.method == 'GET':
         training = fetch_training_occurrence_from_agenda(occurrence_id)
@@ -143,7 +145,7 @@ def handle_attendance(occurrence_id):
 @bp.route('/me/attendances', methods=['GET'])
 def my_attendances():
     """Get all attendances for the current user."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user:
         return _error('authentication_required', 401)
 
@@ -191,7 +193,7 @@ def my_attendances():
 @bp.route('/coach/trainings/<occurrence_id>', methods=['GET'])
 def coach_training_detail(occurrence_id):
     """Coach view: detailed attendance list for a training."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach', 'team_betreuer'):
         return _error('forbidden', 403)
 
@@ -226,7 +228,7 @@ def coach_training_detail(occurrence_id):
 @bp.route('/coach/summary', methods=['GET'])
 def coach_summary():
     """Get attendance summary across all upcoming trainings."""
-    current_user = get_current_user(request)
+    current_user = get_current_user()
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach', 'team_betreuer'):
         return _error('forbidden', 403)
 

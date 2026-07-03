@@ -25,9 +25,11 @@ def create_app(config_class=Config):
     limiter.init_app(app)
 
     # Blueprints
+    from .routes.auth import bp as auth_bp
     from .routes.attendance import bp as attendance_bp
     from .routes.api import bp as api_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(attendance_bp)
     app.register_blueprint(api_bp)
 
