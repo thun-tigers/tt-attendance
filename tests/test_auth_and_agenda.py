@@ -1,5 +1,6 @@
 from app.extensions import db
-from app.models import User
+from app.models import Attendance, User
+from app import attendance_summary
 from app.routes import attendance as attendance_routes
 from app import jwt_utils
 
@@ -24,6 +25,26 @@ def _make_user(app):
         return user.id
 
 
+def _make_coach(app):
+    with app.app_context():
+        user = User(
+            auth_user_id=77,
+            username='coach1',
+            display_name='Coach One',
+            service_role='coach',
+            platform_role='user',
+            claims_json={
+                'memberships': [{'team_code': 'SENIORS'}],
+                'teams': ['SENIORS'],
+                'permissions': [],
+                'member_roles': ['coach'],
+            },
+        )
+        db.session.add(user)
+        db.session.commit()
+        return user.id
+
+
 def test_current_user_uses_session_claims_for_teams(client, app, monkeypatch):
     user_id = _make_user(app)
     captured = {}
@@ -34,6 +55,12 @@ def test_current_user_uses_session_claims_for_teams(client, app, monkeypatch):
         return 'ok'
 
     monkeypatch.setattr(attendance_routes, 'render_template', fake_render_template)
+    monkeypatch.setattr(attendance_routes, 'fetch_position_groups', lambda: [])
+    monkeypatch.setattr(
+        attendance_routes,
+        'summarize_training_attendance',
+        lambda training_id, position_groups=None: {'position_summary': []},
+    )
 
     with client.session_transaction() as session:
         session['user_id'] = user_id
@@ -63,6 +90,165 @@ def test_visible_team_codes_falls_back_to_teams_list():
     }
 
     assert attendance_routes._visible_team_codes(current_user) == ['U18', 'SENIORS']
+
+
+def test_position_summary_counts_only_attending_users(app, monkeypatch):
+    with app.app_context():
+        db.session.add_all([
+            Attendance(training_id='training-1', user_id=10, status='attending'),
+            Attendance(training_id='training-1', user_id=11, status='attending'),
+            Attendance(training_id='training-1', user_id=12, status='maybe'),
+            Attendance(training_id='training-1', user_id=13, status='declined'),
+        ])
+        db.session.commit()
+
+        positions_by_user = {
+            10: 'OL',
+            11: 'QB',
+            12: 'OL',
+            13: 'QB',
+        }
+        monkeypatch.setattr(attendance_summary, 'fetch_member_position', lambda user_id: positions_by_user.get(user_id))
+
+        result = attendance_summary.summarize_training_attendance(
+            'training-1',
+            [
+                {'key': 'OL', 'label': 'Offense Line'},
+                {'key': 'QB', 'label': 'Quarterback'},
+            ],
+        )
+
+    assert result['summary'] == {'attending': 2, 'maybe': 1, 'declined': 1}
+    assert result['position_summary'] == [
+        {'key': 'OL', 'label': 'Offense Line', 'attending': 1},
+        {'key': 'QB', 'label': 'Quarterback', 'attending': 1},
+    ]
+
+
+def test_attendance_card_renders_time_in_header_and_position_badges(client, app, monkeypatch):
+    user_id = _make_coach(app)
+    monkeypatch.setattr(attendance_routes, 'fetch_position_groups', lambda: [{'key': 'OL', 'label': 'Offense Line'}])
+    monkeypatch.setattr(attendance_routes, 'fetch_trainings_from_agenda_for_teams', lambda team_codes=None: [{
+        'id': 'training-1',
+        'title': 'Sommertraining MI',
+        'team_code': 'SENIORS',
+        'date': '2026-07-08',
+        'start_time': '19:30',
+        'end_time': '21:30',
+        'location': 'Stadion',
+    }])
+    monkeypatch.setattr(
+        attendance_routes,
+        'summarize_training_attendance',
+        lambda training_id, position_groups=None: {
+            'position_summary': [{'key': 'OL', 'label': 'Offense Line', 'attending': 3}],
+        },
+    )
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    response = client.get('/')
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Sommertraining MI' in body
+    assert '19:30' in body
+    assert '21:30' in body
+    assert 'OL' in body
+    assert 'Offense Line' not in body
+    assert 'position-count' in body
+    assert '/coach/training/training-1' in body
+
+
+def test_coach_presence_api_marks_user_attending(client, app):
+    coach_id = _make_coach(app)
+    with app.app_context():
+        db.session.add(Attendance(training_id='training-1', user_id=10, status='maybe'))
+        db.session.commit()
+
+    with client.session_transaction() as session:
+        session['user_id'] = coach_id
+
+    response = client.post('/api/trainings/training-1/presence', json={
+        'user_id': 10,
+        'attendance_status': 'attending',
+    })
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['attendance_status'] == 'attending'
+    assert payload['presence_status'] == 'present'
+    assert payload['presence_summary'] == {'present': 1, 'unexcused': 0}
+
+    with app.app_context():
+        attendance = Attendance.query.filter_by(training_id='training-1', user_id=10).first()
+        assert attendance.status == 'attending'
+        assert attendance.presence_status == 'present'
+        assert attendance.presence_marked_at is not None
+
+
+def test_coach_presence_api_marks_user_unexcused_as_declined(client, app):
+    coach_id = _make_coach(app)
+    with app.app_context():
+        db.session.add(Attendance(training_id='training-1', user_id=10, status='attending', presence_status='present'))
+        db.session.commit()
+
+    with client.session_transaction() as session:
+        session['user_id'] = coach_id
+
+    response = client.post('/api/trainings/training-1/presence', json={
+        'user_id': 10,
+        'attendance_status': 'unexcused',
+    })
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['attendance_status'] == 'declined'
+    assert payload['presence_status'] == 'unexcused'
+    assert payload['summary'] == {'attending': 0, 'maybe': 0, 'declined': 1}
+
+    with app.app_context():
+        attendance = Attendance.query.filter_by(training_id='training-1', user_id=10).first()
+        assert attendance.status == 'declined'
+        assert attendance.presence_status == 'unexcused'
+
+
+def test_coach_detail_renders_presence_controls(client, app, monkeypatch):
+    coach_id = _make_coach(app)
+    with app.app_context():
+        db.session.add_all([
+            Attendance(training_id='training-1', user_id=10, status='attending'),
+            Attendance(training_id='training-1', user_id=11, status='maybe'),
+            Attendance(training_id='training-1', user_id=12, status='declined'),
+        ])
+        db.session.commit()
+
+    monkeypatch.setattr(attendance_routes, 'fetch_position_groups', lambda: [{'key': 'OL', 'label': 'Offense Line'}])
+    monkeypatch.setattr(attendance_routes, 'fetch_member_position', lambda user_id: 'OL')
+    monkeypatch.setattr(attendance_routes, 'fetch_user_from_auth', lambda user_id: {
+        'username': f'user{user_id}',
+        'display_name': f'User {user_id}',
+    })
+    monkeypatch.setattr(attendance_routes.requests, 'get', lambda *args, **kwargs: type('Response', (), {
+        'status_code': 200,
+        'json': lambda self: {'id': 'training-1', 'title': 'Training', 'date': '2026-07-10', 'time': '10:00 - 12:00'},
+    })())
+
+    with client.session_transaction() as session:
+        session['user_id'] = coach_id
+
+    response = client.get('/coach/training/training-1')
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Präsenzkontrolle' in body
+    assert 'OL' in body
+    assert 'Zugesagt · 1' in body
+    assert 'Unsicher · 1' in body
+    assert 'Abgesagt · 1' in body
+    assert 'OK' in body
+    assert 'Unentschuldigt' in body
 
 
 def test_fetch_trainings_logs_and_returns_empty_list(app, monkeypatch, caplog):

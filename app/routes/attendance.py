@@ -3,6 +3,7 @@ from urllib.parse import urljoin, urlparse
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash
 from ..extensions import db
 from ..models import Attendance
+from ..attendance_summary import fetch_member_position, fetch_position_groups, summarize_training_attendance
 from ..forms import AttendanceForm
 from ..jwt_utils import (
     fetch_trainings_from_agenda_for_teams,
@@ -61,6 +62,68 @@ def _visible_team_codes(current_user):
     return fallback_codes
 
 
+def _is_coach_user(current_user):
+    return bool(current_user and current_user.get('role') in ('admin', 'coach', 'head_coach'))
+
+
+def _status_counts(attendances):
+    counts = {'attending': 0, 'maybe': 0, 'declined': 0}
+    for attendance in attendances:
+        counts[attendance.status] = counts.get(attendance.status, 0) + 1
+    return counts
+
+
+def _presence_counts(attendances):
+    return {
+        'present': sum(1 for attendance in attendances if attendance.presence_status == 'present'),
+        'unexcused': sum(1 for attendance in attendances if attendance.presence_status == 'unexcused'),
+    }
+
+
+def _build_coach_presence_groups(attendances):
+    position_groups = fetch_position_groups()
+    positions_by_key = {
+        group['key']: {
+            'key': group['key'],
+            'label': group['label'],
+            'statuses': {'attending': [], 'maybe': [], 'declined': []},
+            'total': 0,
+        }
+        for group in position_groups
+        if group.get('key')
+    }
+    unknown_key = 'UNKNOWN'
+
+    for attendance in attendances:
+        user_info = fetch_user_from_auth(attendance.user_id) or {}
+        position = fetch_member_position(attendance.user_id)
+        if position not in positions_by_key:
+            positions_by_key.setdefault(unknown_key, {
+                'key': unknown_key,
+                'label': 'Ohne Gruppe',
+                'statuses': {'attending': [], 'maybe': [], 'declined': []},
+                'total': 0,
+            })
+            position = unknown_key
+
+        entry = {
+            'user_id': attendance.user_id,
+            'display_name': user_info.get('display_name') or user_info.get('username', f'User {attendance.user_id}'),
+            'username': user_info.get('username'),
+            'first_name': user_info.get('first_name'),
+            'last_name': user_info.get('last_name'),
+            'email': user_info.get('email'),
+            'status': attendance.status,
+            'presence_status': attendance.presence_status,
+            'reason': attendance.reason,
+            'updated_at': attendance.updated_at,
+        }
+        positions_by_key[position]['statuses'].setdefault(attendance.status, []).append(entry)
+        positions_by_key[position]['total'] += 1
+
+    return [group for group in positions_by_key.values() if group['total'] > 0]
+
+
 @bp.route('/')
 def index():
     """Main attendance page - show upcoming trainings with 3-button system."""
@@ -72,6 +135,7 @@ def index():
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    position_groups = fetch_position_groups()
 
     # Get user's existing attendances
     my_attendances = {
@@ -98,12 +162,14 @@ def index():
             'is_cancelled': bool(t.get('is_cancelled', False)),
             'my_status': status,
             'my_reason': reason,
+            'position_summary': summarize_training_attendance(aid, position_groups)['position_summary'],
         })
 
     return render_template(
         'attendance.html',
         current_user=current_user,
         trainings=trainings_with_status,
+        is_coach=_is_coach_user(current_user),
         active_tab='attendance',
     )
 
@@ -116,7 +182,7 @@ def coach_dashboard():
         return redirect(url_for('auth.login'))
 
     # Check if user has coach role
-    is_coach = current_user.get('role') in ('admin', 'coach', 'head_coach')
+    is_coach = _is_coach_user(current_user)
     if not is_coach:
         return redirect(url_for('attendance.index'))
 
@@ -155,7 +221,7 @@ def coach_dashboard():
 def coach_training_detail(occurrence_id):
     """Detailed view of one training's attendance for coaches."""
     current_user = get_current_user()
-    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
+    if not _is_coach_user(current_user):
         return redirect(url_for('attendance.index'))
 
     # Fetch training info from agenda
@@ -179,29 +245,67 @@ def coach_training_detail(occurrence_id):
     # Get attendances with user details
     attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
 
+    position_groups = _build_coach_presence_groups(attendances)
     groups = {'attending': [], 'maybe': [], 'declined': []}
-    for a in attendances:
-        user_info = fetch_user_from_auth(a.user_id) or {}
-        groups.setdefault(a.status, []).append({
-            'user_id': a.user_id,
-            'display_name': user_info.get('display_name') or user_info.get('username', f'User {a.user_id}'),
-            'username': user_info.get('username'),
-            'first_name': user_info.get('first_name'),
-            'last_name': user_info.get('last_name'),
-            'email': user_info.get('email'),
-            'status': a.status,
-            'reason': a.reason,
-            'updated_at': a.updated_at,
-        })
+    for group in position_groups:
+        for status, participants in group['statuses'].items():
+            groups.setdefault(status, []).extend(participants)
 
     return render_template(
         'coach_training_detail.html',
         current_user=current_user,
         training=training,
+        occurrence_id=occurrence_id,
         groups=groups,
+        position_groups=position_groups,
+        summary=_status_counts(attendances),
+        presence_summary=_presence_counts(attendances),
         is_coach=True,
         active_tab='coach',
     )
+
+
+@bp.route('/api/trainings/<occurrence_id>/presence', methods=['POST'])
+def set_presence_api(occurrence_id):
+    current_user = get_current_user()
+    if not _is_coach_user(current_user):
+        return jsonify({'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    attendance_status = data.get('attendance_status')
+    if attendance_status not in ('attending', 'declined', 'unexcused'):
+        return jsonify({'error': 'invalid_attendance_status'}), 400
+
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'invalid_user_id'}), 400
+
+    attendance = Attendance.query.filter_by(training_id=occurrence_id, user_id=user_id).first()
+    if not attendance:
+        return jsonify({'error': 'attendance_not_found'}), 404
+
+    attendance.status = 'declined' if attendance_status == 'unexcused' else attendance_status
+    if attendance_status == 'attending':
+        attendance.presence_status = 'present'
+    elif attendance_status == 'unexcused':
+        attendance.presence_status = 'unexcused'
+    else:
+        attendance.presence_status = None
+    attendance.presence_marked_at = datetime.now(timezone.utc) if attendance.presence_status else None
+    attendance.updated_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
+    return jsonify({
+        'status': 'ok',
+        'user_id': user_id,
+        'attendance_status': attendance.status,
+        'presence_status': attendance.presence_status,
+        'summary': _status_counts(attendances),
+        'presence_summary': _presence_counts(attendances),
+    })
 
 
 @bp.route('/api/trainings/<occurrence_id>/set-status', methods=['POST'])
@@ -244,13 +348,11 @@ def set_status_api(occurrence_id):
     db.session.commit()
 
     # Get updated summary
-    all_attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
-    summary = {'attending': 0, 'maybe': 0, 'declined': 0}
-    for a in all_attendances:
-        summary[a.status] = summary.get(a.status, 0) + 1
+    training_summary = summarize_training_attendance(occurrence_id)
 
     return jsonify({
         'status': 'ok',
         'my_status': status,
-        'summary': summary,
+        'summary': training_summary['summary'],
+        'position_summary': training_summary['position_summary'],
     })

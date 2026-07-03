@@ -1,80 +1,115 @@
 {% extends "base.html" %}
-{% block title %}Trainings-Detail – Coach{% endblock %}
+{% block title %}Präsenzkontrolle – Coach{% endblock %}
+
+{% set status_meta = {
+  'attending': {'label': 'Zugesagt', 'icon': 'bi-hand-thumbs-up-fill', 'tone': 'emerald'},
+  'maybe': {'label': 'Unsicher', 'icon': 'bi-question-circle-fill', 'tone': 'slate'},
+  'declined': {'label': 'Abgesagt', 'icon': 'bi-hand-thumbs-down-fill', 'tone': 'rose'},
+} %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto">
+<div class="max-w-5xl mx-auto">
   <a href="{{ url_for('attendance.coach_dashboard') }}" class="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline mb-4">
     <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
   </a>
 
-  <div class="mb-6">
-    <h1 class="text-xl font-bold">{{ training.title or 'Training' }}</h1>
-    <div class="flex flex-wrap gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
-      {% if training.date %}<span><i class="bi bi-calendar3 mr-1"></i>{{ training.date }}</span>{% endif %}
-      {% if training.time %}<span><i class="bi bi-clock mr-1"></i>{{ training.time }}</span>{% endif %}
-      {% if training.location %}<span><i class="bi bi-geo-alt mr-1"></i>{{ training.location }}</span>{% endif %}
-    </div>
-  </div>
-
-  <!-- Summary cards -->
-  <div class="grid grid-cols-3 gap-3 mb-6">
-    <div class="rounded-xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/20 p-4 text-center">
-      <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ groups.attending|length }}</div>
-      <div class="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">👍 Dabei</div>
-    </div>
-    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-4 text-center">
-      <div class="text-3xl font-bold text-slate-500 dark:text-slate-400">{{ groups.maybe|length }}</div>
-      <div class="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">❓ Unsicher</div>
-    </div>
-    <div class="rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-4 text-center">
-      <div class="text-3xl font-bold text-red-500">{{ groups.declined|length }}</div>
-      <div class="text-xs text-red-500 font-semibold mt-1">👎 Abgesagt</div>
-    </div>
-  </div>
-
-  <!-- Teilnehmerlisten -->
-  {% for group_key, group_label, group_color, group_bg in [
-    ('attending', '👍 Zugesagt', 'green', 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900'),
-    ('maybe', '❓ Unsicher', 'slate', 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'),
-    ('declined', '👎 Abgesagt', 'red', 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900'),
-  ] %}
-  {% if groups[group_key] %}
-  <div class="rounded-xl border {{ group_bg }} p-4 mb-3">
-    <h3 class="font-semibold text-sm mb-3 text-{{ group_color }}-700 dark:text-{{ group_color }}-300">
-      {{ group_label }} ({{ groups[group_key]|length }})
-    </h3>
-    <div class="space-y-2">
-      {% for p in groups[group_key] %}
-      <div class="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-        <div class="flex items-center gap-2">
-          <div class="h-7 w-7 rounded-full bg-{{ group_color }}-100 dark:bg-{{ group_color }}-900/40 flex items-center justify-center text-xs font-bold text-{{ group_color }}-600 dark:text-{{ group_color }}-400">
-            {{ (p.display_name or p.username or '?')[0].upper() }}
-          </div>
-          <div>
-            <div class="text-sm font-medium">{{ p.display_name or p.username }}</div>
-            {% if p.first_name or p.last_name %}
-            <div class="text-xs text-slate-400">{{ p.first_name }} {{ p.last_name }}</div>
-            {% endif %}
-          </div>
-        </div>
-        <div class="text-right">
-          {% if p.reason %}
-          <div class="text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title="{{ p.reason }}">
-            <i class="bi bi-chat-quote mr-1"></i>{{ p.reason }}
-          </div>
-          {% endif %}
-          <div class="text-[10px] text-slate-400">
-            {% if p.updated_at %}{{ p.updated_at.strftime('%d.%m. %H:%M') if p.updated_at is not string else p.updated_at[:16] }}{% endif %}
-          </div>
+  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-5 mb-4 shadow-sm">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 class="text-xl font-bold">{{ training.title or 'Training' }}</h1>
+        <div class="flex flex-wrap gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {% if training.date %}<span><i class="bi bi-calendar3 mr-1"></i>{{ training.date }}</span>{% endif %}
+          {% if training.time %}<span><i class="bi bi-clock mr-1"></i>{{ training.time }}</span>{% endif %}
+          {% if training.location %}<span><i class="bi bi-geo-alt mr-1"></i>{{ training.location }}</span>{% endif %}
         </div>
       </div>
-      {% endfor %}
+      <div class="grid grid-cols-4 gap-1.5 text-center">
+        <div class="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 px-2 py-2">
+          <div class="text-lg font-bold text-emerald-700 dark:text-emerald-300">{{ summary.attending }}</div>
+          <div class="text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Zugesagt</div>
+        </div>
+        <div class="rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-2">
+          <div class="text-lg font-bold text-slate-600 dark:text-slate-300">{{ summary.maybe }}</div>
+          <div class="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Unsicher</div>
+        </div>
+        <div class="rounded-lg bg-rose-50 dark:bg-rose-900/20 px-2 py-2">
+          <div class="text-lg font-bold text-rose-700 dark:text-rose-300">{{ summary.declined }}</div>
+          <div class="text-[10px] uppercase tracking-wide text-rose-700 dark:text-rose-300">Abgesagt</div>
+        </div>
+        <div class="rounded-lg bg-indigo-50 dark:bg-indigo-900/20 px-2 py-2">
+          <div id="presentCount" class="text-lg font-bold text-indigo-700 dark:text-indigo-300">{{ presence_summary.present }}</div>
+          <div class="text-[10px] uppercase tracking-wide text-indigo-700 dark:text-indigo-300">OK</div>
+        </div>
+      </div>
     </div>
   </div>
-  {% endif %}
-  {% endfor %}
 
-  {% if not groups.attending and not groups.maybe and not groups.declined %}
+  {% if position_groups %}
+  <div class="grid gap-3">
+    {% for group in position_groups %}
+    <section class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <header class="flex items-center justify-between bg-slate-50 dark:bg-slate-800/70 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+        <div class="flex items-center gap-2">
+          <span class="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900/40 px-2 text-sm font-black text-indigo-700 dark:text-indigo-300">{{ group.key }}</span>
+          <div>
+            <h2 class="text-sm font-bold text-slate-900 dark:text-white">{{ group.label }}</h2>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">{{ group.total }} Rückmeldungen</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for status_key in ['attending', 'maybe', 'declined'] %}
+        {% set participants = group.statuses[status_key] %}
+        {% if participants %}
+        <div class="p-3 sm:p-4">
+          <div class="mb-2 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-bold
+            {% if status_key == 'attending' %}bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300
+            {% elif status_key == 'maybe' %}bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300
+            {% else %}bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300{% endif %}">
+            <i class="bi {{ status_meta[status_key].icon }}"></i>
+            {{ status_meta[status_key].label }} · {{ participants|length }}
+          </div>
+          <div class="grid gap-2">
+            {% for p in participants %}
+            <div class="presence-row flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/30 px-3 py-2"
+                 data-user-id="{{ p.user_id }}">
+              <div class="min-w-0 flex items-center gap-2">
+                <div class="h-8 w-8 shrink-0 rounded-full bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700 flex items-center justify-center text-xs font-black text-slate-600 dark:text-slate-300">
+                  {{ (p.display_name or p.username or '?')[0].upper() }}
+                </div>
+                <div class="min-w-0">
+                  <div class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ p.display_name or p.username }}</div>
+                  {% if p.reason %}
+                  <div class="truncate text-[11px] text-slate-500 dark:text-slate-400" title="{{ p.reason }}">
+                    <i class="bi bi-chat-quote mr-1"></i>{{ p.reason }}
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="presence-actions ml-auto flex shrink-0 gap-1.5 justify-end" data-state="{{ p.presence_status or '' }}">
+                <button type="button"
+                        class="presence-btn present-btn rounded-lg px-3 py-1.5 text-xs font-bold transition {{ 'bg-emerald-600 text-white' if p.presence_status == 'present' else 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300' }}"
+                        onclick="setCoachAttendance(this, '{{ occurrence_id }}', {{ p.user_id }}, 'attending')">
+                  OK
+                </button>
+                <button type="button"
+                        class="presence-btn unexcused-btn rounded-lg px-2.5 py-1.5 text-xs font-bold transition {{ 'bg-amber-500 text-white' if p.presence_status == 'unexcused' else 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700 dark:hover:text-amber-300' }}"
+                        onclick="setCoachAttendance(this, '{{ occurrence_id }}', {{ p.user_id }}, 'unexcused')">
+                  Unentschuldigt
+                </button>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
   <div class="text-center py-12">
     <div class="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
       <i class="bi bi-inbox text-xl text-slate-400"></i>
@@ -82,43 +117,31 @@
     <p class="text-slate-500 dark:text-slate-400 text-sm">Noch keine Rückmeldungen zu diesem Training.</p>
   </div>
   {% endif %}
-
-  <!-- Copy for WhatsApp -->
-  <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-    <div class="flex items-center justify-between mb-2">
-      <h3 class="text-sm font-semibold"><i class="bi bi-whatsapp mr-1 text-green-500"></i> WhatsApp-Export</h3>
-      <button onclick="copyWhatsApp()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-        <i class="bi bi-clipboard mr-1"></i>Kopieren
-      </button>
-    </div>
-    <pre id="whatsappText" class="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
-📋 {{ training.title or 'Training' }} ({{ training.date or '' }} {{ training.time or '' }})
-✅ Zugesagt ({{ groups.attending|length }}):
-{% for p in groups.attending %}  • {{ p.display_name or p.username }}{% if p.reason %} ({{ p.reason }}){% endif %}
-{% endfor %}
-❓ Unsicher ({{ groups.maybe|length }}):
-{% for p in groups.maybe %}  • {{ p.display_name or p.username }}{% if p.reason %} – {{ p.reason }}{% endif %}
-{% endfor %}
-👎 Abgesagt ({{ groups.declined|length }}):
-{% for p in groups.declined %}  • {{ p.display_name or p.username }}{% if p.reason %} – {{ p.reason }}{% endif %}
-{% endfor %}</pre>
-  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function copyWhatsApp() {
-  const text = document.getElementById('whatsappText').textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = event.target;
-    btn.innerHTML = '<i class="bi bi-check-lg mr-1"></i>Kopiert!';
-    setTimeout(() => {
-      btn.innerHTML = '<i class="bi bi-clipboard mr-1"></i>Kopieren';
-    }, 2000);
-  }).catch(() => {
-    alert('Konnte nicht kopiert werden.');
-  });
+function setCoachAttendance(button, trainingId, userId, attendanceStatus) {
+  button.disabled = true;
+  fetch(`/api/trainings/${encodeURIComponent(trainingId)}/presence`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, attendance_status: attendanceStatus }),
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        alert(data.error);
+        button.disabled = false;
+        return;
+      }
+      window.location.reload();
+    })
+    .catch(() => {
+      button.disabled = false;
+      alert('Anmeldung konnte nicht gespeichert werden.');
+    });
 }
 </script>
 {% endblock %}

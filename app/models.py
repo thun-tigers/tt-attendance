@@ -42,6 +42,8 @@ class Attendance(db.Model):
     training_id = db.Column(db.String(64), nullable=False, index=True)
     user_id = db.Column(db.Integer, nullable=False, index=True)
     status = db.Column(db.String(16), nullable=False, default='attending')
+    presence_status = db.Column(db.String(16), nullable=True)
+    presence_marked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     reason = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -52,6 +54,8 @@ class Attendance(db.Model):
             'training_id': self.training_id,
             'user_id': self.user_id,
             'status': self.status,
+            'presence_status': self.presence_status,
+            'presence_marked_at': self.presence_marked_at.isoformat() if self.presence_marked_at else None,
             'reason': self.reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,

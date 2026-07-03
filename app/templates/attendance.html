@@ -2,6 +2,25 @@
 {% block title %}Trainings-Anmeldung – Tigers{% endblock %}
 
 {% block content %}
+<style>
+  @media (hover: none), (pointer: coarse) {
+    .status-btn[data-selected="false"],
+    .status-btn[data-selected="false"]:hover,
+    .status-btn[data-selected="false"]:focus {
+      background-color: transparent !important;
+      border-color: transparent !important;
+      box-shadow: none !important;
+      color: rgb(100 116 139) !important;
+      opacity: 0.7 !important;
+      transform: none !important;
+    }
+    .dark .status-btn[data-selected="false"],
+    .dark .status-btn[data-selected="false"]:hover,
+    .dark .status-btn[data-selected="false"]:focus {
+      color: rgb(203 213 225) !important;
+    }
+  }
+</style>
 <div class="max-w-5xl mx-auto">
   <h1 class="text-lg sm:text-xl font-bold mb-1">Trainings-Anmeldung</h1>
   <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 sm:mb-5">Melde dich für die kommenden Trainings an oder ab</p>
@@ -9,7 +28,7 @@
   {% if trainings %}
   <div class="grid gap-3">
     {% for t in trainings %}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full" data-training-id="{{ t.id }}">
+    <div class="training-card rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full" data-training-id="{{ t.id }}">
       {% set status_meta = {
         'attending': {
           'label': 'Dabei',
@@ -44,9 +63,40 @@
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-start gap-2 justify-between">
+              {% if is_coach %}
+              <a href="{{ url_for('attendance.coach_training_detail', occurrence_id=t.id) }}"
+                 class="group min-w-0 rounded-lg -m-1 p-1 transition hover:bg-white/70 dark:hover:bg-slate-900/50"
+                 title="Präsenzliste öffnen">
+                <h3 class="font-bold text-[0.98rem] leading-tight truncate group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
+                  {{ t.title }}
+                  <i class="bi bi-box-arrow-up-right ml-1 text-[0.7rem] opacity-50 group-hover:opacity-100"></i>
+                </h3>
+                <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+                  <span class="inline-flex items-center gap-1">
+                    <i class="bi bi-clock"></i>
+                    {{ t.start_time or '—' }}{% if t.start_time or t.end_time %}–{{ t.end_time or '—' }}{% endif %}
+                  </span>
+                  <span class="inline-flex items-center gap-1">
+                    <i class="bi bi-people"></i>
+                    {{ t.team_code or '—' }}
+                  </span>
+                </div>
+              </a>
+              {% else %}
               <div class="min-w-0">
                 <h3 class="font-bold text-[0.98rem] leading-tight truncate">{{ t.title }}</h3>
+                <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+                  <span class="inline-flex items-center gap-1">
+                    <i class="bi bi-clock"></i>
+                    {{ t.start_time or '—' }}{% if t.start_time or t.end_time %}–{{ t.end_time or '—' }}{% endif %}
+                  </span>
+                  <span class="inline-flex items-center gap-1">
+                    <i class="bi bi-people"></i>
+                    {{ t.team_code or '—' }}
+                  </span>
+                </div>
               </div>
+              {% endif %}
               {% if is_cancelled %}
               <span class="shrink-0 inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300">
                 Abgesagt
@@ -71,25 +121,14 @@
         </div>
       </div>
 
+      {% if is_cancelled %}
       <div class="px-3 sm:px-4 py-3 sm:py-3 border-b border-slate-200/70 dark:border-slate-700/70">
-        <div class="grid grid-cols-3 gap-2 text-center text-[11px]">
-          <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 px-2 py-2">
-            <div class="font-semibold text-slate-900 dark:text-slate-50">{{ t.start_time or '—' }}</div>
-          </div>
-          <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 px-2 py-2">
-            <div class="font-semibold text-slate-900 dark:text-slate-50">{{ t.end_time or '—' }}</div>
-          </div>
-          <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 px-2 py-2">
-            <div class="font-semibold text-slate-900 dark:text-slate-50">{{ t.team_code or '—' }}</div>
-          </div>
-        </div>
-        {% if is_cancelled %}
-        <div class="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 text-[11px] font-medium text-rose-700 dark:text-rose-300">
+        <div class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 text-[11px] font-medium text-rose-700 dark:text-rose-300">
           <i class="bi bi-x-circle-fill"></i>
           <span>Termin abgesagt. Anmeldung ist deaktiviert.</span>
         </div>
-        {% endif %}
       </div>
+      {% endif %}
 
       <div class="px-3 sm:px-4 py-3">
         {% if is_cancelled %}
@@ -121,8 +160,17 @@
         </div>
         {% endif %}
 
-        <div class="attendance-summary mt-2.5 text-[11px] text-slate-400 hidden">
-          <span><span class="attending-count">0</span> dabei · <span class="maybe-count">0</span> unsicher · <span class="declined-count">0</span> abgesagt</span>
+        <div class="attendance-summary mt-3">
+          <div class="position-summary flex flex-wrap gap-1.5" aria-label="Zusagen pro Gruppe">
+            {% for group in t.position_summary %}
+            <span
+              class="position-badge inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300"
+              data-position-key="{{ group.key }}">
+              <span>{{ group.key }}</span>
+              <span class="position-count rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-1.5 text-emerald-700 dark:text-emerald-300">{{ group.attending }}</span>
+            </span>
+            {% endfor %}
+          </div>
         </div>
       </div>
     </div>
@@ -144,8 +192,10 @@
 {% block extra_js %}
 <script>
 function setStatus(btn, trainingId, status) {
-  const card = btn.closest('[data-training-id]');
+  const card = btn.closest('.training-card');
+  if (!card) return;
   const buttons = card.querySelectorAll('.status-btn');
+  const baseClass = 'status-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] font-semibold transition-all border-2 min-h-[3.2rem]';
 
   const styleMap = {
     attending: {
@@ -164,14 +214,16 @@ function setStatus(btn, trainingId, status) {
 
   buttons.forEach(b => {
     const val = b.dataset.status;
-    b.className = 'status-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] font-semibold transition-all border-2 min-h-[3.6rem] ' + styleMap[val].idle;
+    b.className = `${baseClass} ${styleMap[val].idle}`;
     b.dataset.selected = 'false';
     b.setAttribute('aria-pressed', 'false');
+    b.blur();
   });
 
-  btn.className = 'status-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] font-semibold transition-all border-2 min-h-[3.6rem] ' + styleMap[status].active;
+  btn.className = `${baseClass} ${styleMap[status].active}`;
   btn.dataset.selected = 'true';
   btn.setAttribute('aria-pressed', 'true');
+  btn.blur();
 
   sendStatus(trainingId, status, null);
 }
@@ -193,31 +245,59 @@ function sendStatus(trainingId, status, reason) {
       return;
     }
     // Update summary
-    const card = document.querySelector(`[data-training-id="${trainingId}"]`);
-    const summary = card.querySelector('.attendance-summary');
+    const card = document.querySelector(`.training-card[data-training-id="${CSS.escape(trainingId)}"]`);
     if (data.summary) {
-      summary.querySelector('.attending-count').textContent = data.summary.attending || 0;
-      summary.querySelector('.maybe-count').textContent = data.summary.maybe || 0;
-      summary.querySelector('.declined-count').textContent = data.summary.declined || 0;
-      summary.classList.remove('hidden');
+      updateSummary(card, data.summary, data.position_summary);
     }
   })
   .catch(err => console.error('Error:', err));
 }
 
+function updateSummary(card, summary, positionSummary) {
+  const summaryNode = card.querySelector('.attendance-summary');
+  if (!summaryNode) {
+    return;
+  }
+
+  if (!Array.isArray(positionSummary)) {
+    return;
+  }
+
+  const positionNode = summaryNode.querySelector('.position-summary');
+  if (!positionNode) {
+    return;
+  }
+  positionNode.innerHTML = positionSummary.map(group => {
+    const key = escapeHtml(group.key || '');
+    const count = Number(group.attending || 0);
+    return `
+      <span class="position-badge inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300" data-position-key="${key}">
+        <span>${key || '—'}</span>
+        <span class="position-count rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-1.5 text-emerald-700 dark:text-emerald-300">${count}</span>
+      </span>
+    `;
+  }).join('');
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
+
 // Load summaries on page load
 document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('[data-training-id]').forEach(card => {
+  document.querySelectorAll('.training-card[data-training-id]').forEach(card => {
     const trainingId = card.dataset.trainingId;
     fetch(`/api/trainings/${trainingId}/attendance`)
       .then(r => r.json())
       .then(data => {
-        const summary = card.querySelector('.attendance-summary');
         if (data.summary) {
-          summary.querySelector('.attending-count').textContent = data.summary.attending || 0;
-          summary.querySelector('.maybe-count').textContent = data.summary.maybe || 0;
-          summary.querySelector('.declined-count').textContent = data.summary.declined || 0;
-          summary.classList.remove('hidden');
+          updateSummary(card, data.summary, data.position_summary);
         }
       })
       .catch(() => {});

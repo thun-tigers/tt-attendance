@@ -1,6 +1,7 @@
 import os
 import logging
 from flask import Flask
+from sqlalchemy import inspect, text
 from .config import Config
 from .extensions import db, migrate, limiter
 
@@ -49,5 +50,24 @@ def create_app(config_class=Config):
     with app.app_context():
         if app.config.get('AUTO_CREATE_DB', True):
             db.create_all()
+            _ensure_attendance_columns()
 
     return app
+
+
+def _ensure_attendance_columns():
+    inspector = inspect(db.engine)
+    if 'attendances' not in inspector.get_table_names():
+        return
+
+    columns = {column['name'] for column in inspector.get_columns('attendances')}
+    statements = []
+    if 'presence_status' not in columns:
+        statements.append('ALTER TABLE attendances ADD COLUMN presence_status VARCHAR(16)')
+    if 'presence_marked_at' not in columns:
+        statements.append('ALTER TABLE attendances ADD COLUMN presence_marked_at TIMESTAMP')
+
+    for statement in statements:
+        db.session.execute(text(statement))
+    if statements:
+        db.session.commit()

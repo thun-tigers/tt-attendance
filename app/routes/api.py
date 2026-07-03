@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from ..extensions import db
 from ..models import Attendance
+from ..attendance_summary import summarize_training_attendance
 from ..jwt_utils import fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
 from .auth import get_current_user
 import requests
@@ -30,8 +31,9 @@ def handle_attendance(occurrence_id):
 
     if request.method == 'GET':
         # Get all attendances for this training
-        attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
-        summary = {'attending': 0, 'maybe': 0, 'declined': 0}
+        training_summary = summarize_training_attendance(occurrence_id)
+        attendances = training_summary['attendances']
+        summary = training_summary['summary']
 
         # Fetch user details from tt-auth
         participants = []
@@ -60,6 +62,7 @@ def handle_attendance(occurrence_id):
         return jsonify({
             'training_id': occurrence_id,
             'summary': summary,
+            'position_summary': training_summary['position_summary'],
             'participants': participants,
             'my_status': my_status,
         })

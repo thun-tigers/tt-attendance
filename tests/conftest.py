@@ -20,6 +20,7 @@ class TestConfig:
     LOG_LEVEL = 'DEBUG'
     AUTH_BASE_URL = 'http://localhost:8085'
     TT_AUTH_INTERNAL_URL = 'http://tt-auth:5000'
+    TT_MEMBERS_INTERNAL_URL = 'http://tt-members:5000'
     TT_AGENDA_INTERNAL_URL = 'http://tt-agenda:5000'
     TT_INFRA_INTERNAL_URL = 'http://tt-infra:5000'
     SSO_SHARED_SECRET = 'test-sso-secret'
