@@ -45,9 +45,28 @@
   </div>
 
   {% if position_groups %}
+  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 sm:p-4 mb-4 shadow-sm">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2">
+        <i class="bi bi-funnel-fill text-indigo-500"></i>
+        Position-Filter
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="positionFilter" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+          <option value="ALL">Alle Positionen</option>
+          {% for group in position_groups %}
+          <option value="{{ group.key|upper }}">{{ group.key }} · {{ group.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if position_groups %}
   <div class="grid gap-3">
     {% for group in position_groups %}
-    <section class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+    <section class="position-group-section rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden" data-position-key="{{ group.key|upper }}">
       <header class="flex items-center justify-between bg-slate-50 dark:bg-slate-800/70 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
         <div class="flex items-center gap-2">
           <span class="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900/40 px-2 text-sm font-black text-indigo-700 dark:text-indigo-300">{{ group.key }}</span>
@@ -122,6 +141,18 @@
 
 {% block extra_js %}
 <script>
+function applyPositionFilter() {
+  const select = document.getElementById('positionFilter');
+  if (!select) return;
+
+  const selected = (select.value || 'ALL').toUpperCase();
+  document.querySelectorAll('.position-group-section').forEach((section) => {
+    const key = (section.dataset.positionKey || '').toUpperCase();
+    const visible = selected === 'ALL' || key === selected;
+    section.classList.toggle('hidden', !visible);
+  });
+}
+
 function setCoachAttendance(button, trainingId, userId, attendanceStatus) {
   button.disabled = true;
   fetch(`/api/trainings/${encodeURIComponent(trainingId)}/presence`, {
@@ -143,5 +174,12 @@ function setCoachAttendance(button, trainingId, userId, attendanceStatus) {
       alert('Anmeldung konnte nicht gespeichert werden.');
     });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const select = document.getElementById('positionFilter');
+  if (!select) return;
+  select.addEventListener('change', applyPositionFilter);
+  applyPositionFilter();
+});
 </script>
 {% endblock %}

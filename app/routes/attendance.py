@@ -1,6 +1,7 @@
 from urllib.parse import urljoin, urlparse
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, jsonify, flash
+from ..authz import has_role_permission
 from ..extensions import db
 from ..models import Attendance
 from ..attendance_summary import fetch_member_position, fetch_position_groups, summarize_training_attendance
@@ -19,6 +20,28 @@ bp = Blueprint('attendance', __name__)
 _WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
 
 
+def _cleanup_cancelled_training(occurrence_id):
+    removed = Attendance.query.filter_by(training_id=str(occurrence_id)).delete(synchronize_session=False)
+    if removed:
+        db.session.commit()
+    return removed
+
+
+def _cleanup_cancelled_trainings(trainings):
+    cancelled_ids = {
+        str(item.get('id'))
+        for item in (trainings or [])
+        if item and item.get('is_cancelled') and item.get('id') is not None
+    }
+    if not cancelled_ids:
+        return 0
+
+    removed = Attendance.query.filter(Attendance.training_id.in_(cancelled_ids)).delete(synchronize_session=False)
+    if removed:
+        db.session.commit()
+    return removed
+
+
 def _format_date_label(date_iso):
     if not date_iso:
         return None
@@ -34,7 +57,8 @@ def _visible_team_codes(current_user):
     if not current_user:
         return []
     permissions = current_user.get('permissions') or []
-    if current_user.get('role') == 'admin' or '*' in permissions:
+    role_permissions = (current_user.get('claims_json') or {}).get('role_permissions') or current_user.get('role_permissions') or {}
+    if current_user.get('role') == 'admin' or '*' in permissions or has_role_permission(role_permissions, 'admin', 'attendance'):
         return []
 
     claims = current_user.get('claims_json') or {}
@@ -63,7 +87,18 @@ def _visible_team_codes(current_user):
 
 
 def _is_coach_user(current_user):
-    return bool(current_user and current_user.get('role') in ('admin', 'coach', 'head_coach'))
+    if not current_user:
+        return False
+    role_permissions = (current_user.get('claims_json') or {}).get('role_permissions') or current_user.get('role_permissions') or {}
+    if (
+        has_role_permission(role_permissions, 'create', 'attendance')
+        or has_role_permission(role_permissions, 'write', 'attendance')
+        or has_role_permission(role_permissions, 'update', 'attendance')
+        or has_role_permission(role_permissions, 'delete', 'attendance')
+        or has_role_permission(role_permissions, 'approve', 'attendance')
+    ):
+        return True
+    return bool(current_user.get('role') in ('admin', 'coach', 'head_coach'))
 
 
 def _status_counts(attendances):
@@ -135,6 +170,7 @@ def index():
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    _cleanup_cancelled_trainings(trainings)
     position_groups = fetch_position_groups()
 
     # Get user's existing attendances
@@ -188,6 +224,7 @@ def coach_dashboard():
 
     # Fetch trainings with attendance counts
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    _cleanup_cancelled_trainings(trainings)
 
     # Build summary per training
     training_summaries = []
@@ -242,8 +279,11 @@ def coach_training_detail(occurrence_id):
     except requests.RequestException:
         pass
 
+    if training and training.get('is_cancelled'):
+        _cleanup_cancelled_training(occurrence_id)
+
     # Get attendances with user details
-    attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
+    attendances = [] if training and training.get('is_cancelled') else Attendance.query.filter_by(training_id=occurrence_id).all()
 
     position_groups = _build_coach_presence_groups(attendances)
     groups = {'attending': [], 'maybe': [], 'declined': []}
@@ -272,6 +312,12 @@ def set_presence_api(occurrence_id):
         return jsonify({'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
+
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    if training and training.get('is_cancelled'):
+        _cleanup_cancelled_training(occurrence_id)
+        return jsonify({'error': 'cancelled_training'}), 409
+
     user_id = data.get('user_id')
     attendance_status = data.get('attendance_status')
     if attendance_status not in ('attending', 'declined', 'unexcused'):
@@ -317,6 +363,7 @@ def set_status_api(occurrence_id):
 
     training = fetch_training_occurrence_from_agenda(occurrence_id)
     if training and training.get('is_cancelled'):
+        _cleanup_cancelled_training(occurrence_id)
         return jsonify({'error': 'cancelled_training'}), 409
 
     data = request.get_json(silent=True) or {}

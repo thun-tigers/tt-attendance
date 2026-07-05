@@ -11,6 +11,13 @@ import requests
 bp = Blueprint('api', __name__, url_prefix='/api')
 
 
+def _cleanup_cancelled_training(occurrence_id):
+    removed = Attendance.query.filter_by(training_id=str(occurrence_id)).delete(synchronize_session=False)
+    if removed:
+        db.session.commit()
+    return removed
+
+
 def _authorized():
     """Check internal API secret for service-to-service calls."""
     expected = current_app.config.get('INTERNAL_API_SECRET')
@@ -28,6 +35,19 @@ def _error(message, status_code=400):
 def handle_attendance(occurrence_id):
     """Set or get attendance status for a specific training occurrence."""
     current_user = get_current_user()
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    if training and training.get('is_cancelled'):
+        _cleanup_cancelled_training(occurrence_id)
+        if request.method == 'GET':
+            return jsonify({
+                'training_id': occurrence_id,
+                'summary': {'attending': 0, 'maybe': 0, 'declined': 0},
+                'position_summary': {},
+                'participants': [],
+                'my_status': None,
+                'is_cancelled': True,
+            })
+        return _error('cancelled_training', 409)
 
     if request.method == 'GET':
         # Get all attendances for this training
@@ -70,10 +90,6 @@ def handle_attendance(occurrence_id):
     # POST: Set attendance status
     if not current_user:
         return _error('authentication_required', 401)
-
-    training = fetch_training_occurrence_from_agenda(occurrence_id)
-    if training and training.get('is_cancelled'):
-        return _error('cancelled_training', 409)
 
     data = request.get_json(silent=True) or {}
     status = data.get('status')
@@ -161,6 +177,17 @@ def coach_training_detail(occurrence_id):
     if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
         return _error('forbidden', 403)
 
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    if training and training.get('is_cancelled'):
+        _cleanup_cancelled_training(occurrence_id)
+        return jsonify({
+            'training_id': occurrence_id,
+            'summary': {'attending': 0, 'maybe': 0, 'declined': 0},
+            'groups': {'attending': [], 'maybe': [], 'declined': []},
+            'total': 0,
+            'is_cancelled': True,
+        })
+
     attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
     summary = {'attending': 0, 'maybe': 0, 'declined': 0}
 
@@ -217,6 +244,17 @@ def coach_summary():
     result = []
     for training in trainings:
         tid = training.get('id')
+        if training.get('is_cancelled'):
+            _cleanup_cancelled_training(tid)
+            result.append({
+                'training_id': tid,
+                'training_title': training.get('title'),
+                'training_date': training.get('date'),
+                'summary': {'attending': 0, 'maybe': 0, 'declined': 0},
+                'total_responded': 0,
+            })
+            continue
+
         attendances = Attendance.query.filter_by(training_id=tid).all()
         summary = {'attending': 0, 'maybe': 0, 'declined': 0}
         for a in attendances:
@@ -240,6 +278,15 @@ def internal_training_counts(occurrence_id):
     """Return attendance counts for a training occurrence (used by tt-agenda)."""
     if not _authorized():
         return _error('unauthorized', 401)
+
+    training = fetch_training_occurrence_from_agenda(occurrence_id)
+    if training and training.get('is_cancelled'):
+        _cleanup_cancelled_training(occurrence_id)
+        return jsonify({
+            'training_id': occurrence_id,
+            'summary': {'attending': 0, 'maybe': 0, 'declined': 0},
+            'total': 0,
+        })
 
     attendances = Attendance.query.filter_by(training_id=occurrence_id).all()
     summary = {'attending': 0, 'maybe': 0, 'declined': 0}

@@ -44,6 +44,7 @@ def get_current_user():
         'display_name': user.display_name or user.username,
         'memberships': claims.get('memberships') or [],
         'permissions': claims.get('permissions') or [],
+        'role_permissions': claims.get('role_permissions') or {},
         'teams': claims.get('teams') or [],
         'member_roles': claims.get('member_roles') or [],
         'claims_json': claims,
@@ -101,6 +102,7 @@ def sso_login():
     session['display_name'] = user.display_name or user.username
     session['service_role'] = user.service_role
     session['platform_role'] = user.platform_role
+    session['role_permissions'] = claims.get('role_permissions') or {}
     session['claims_json'] = user.claims_json
 
     next_page = request.args.get('next')
