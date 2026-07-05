@@ -81,6 +81,32 @@ def test_current_user_uses_session_claims_for_teams(client, app, monkeypatch):
     assert attendance_routes._visible_team_codes(current_user) == ['U18']
 
 
+def test_attendance_index_renders_with_session_user(client, app, monkeypatch):
+    user_id = _make_user(app)
+
+    monkeypatch.setattr(attendance_routes, 'fetch_position_groups', lambda: [])
+    monkeypatch.setattr(attendance_routes, 'fetch_trainings_from_agenda_for_teams', lambda team_codes=None: [])
+    monkeypatch.setattr(
+        attendance_routes,
+        'render_template',
+        lambda template_name, **context: f'rendered:{template_name}',
+    )
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['claims_json'] = {
+            'memberships': [{'team_code': 'SENIORS', 'is_active': True}],
+            'teams': ['SENIORS'],
+            'permissions': [],
+            'member_roles': ['player'],
+        }
+
+    response = client.get('/')
+
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == 'rendered:attendance.html'
+
+
 def test_visible_team_codes_falls_back_to_teams_list():
     current_user = {
         'role': 'user',

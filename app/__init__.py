@@ -1,7 +1,7 @@
 import os
 import logging
 import requests
-from flask import Flask
+from flask import Flask, session
 from sqlalchemy import inspect, text
 from .config import Config
 from .extensions import db, migrate, limiter
