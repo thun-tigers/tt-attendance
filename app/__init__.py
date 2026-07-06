@@ -28,6 +28,11 @@ def create_app(config_class=Config):
         root_logger.addHandler(handler)
     root_logger.setLevel(log_level)
 
+    # Flask session config
+    app.config.setdefault('SESSION_COOKIE_SECURE', True)
+    app.config.setdefault('SESSION_COOKIE_HTTPONLY', True)
+    app.config.setdefault('SESSION_COOKIE_SAMESITE', 'Lax')
+
     # Extensions
     db.init_app(app)
     migrate.init_app(app, db)
