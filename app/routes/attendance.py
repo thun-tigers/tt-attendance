@@ -53,6 +53,51 @@ def _format_date_label(date_iso):
     return f'{weekday} {dt.strftime("%d.%m.%Y")}'
 
 
+def _build_training_cards(current_user, trainings, position_groups, load_first_summary_only=False):
+    my_attendances = {
+        a.training_id: a
+        for a in Attendance.query.filter_by(user_id=current_user['id']).all()
+    }
+
+    cards = []
+    first_summary_loaded = False
+    for t in trainings:
+        aid = str(t.get('id', ''))
+        attendance = my_attendances.get(aid)
+        status = attendance.status if attendance else None
+        reason = attendance.reason if attendance else None
+        is_cancelled = bool(t.get('is_cancelled', False))
+        load_summary_now = (
+            load_first_summary_only
+            and not first_summary_loaded
+            and not is_cancelled
+        )
+        if load_summary_now:
+            first_summary_loaded = True
+            position_summary = summarize_training_attendance(aid, position_groups)['position_summary']
+        else:
+            position_summary = []
+
+        cards.append({
+            'id': aid,
+            'title': t.get('title', 'Training'),
+            'team_code': t.get('team_code'),
+            'date': t.get('date'),
+            'date_label': _format_date_label(t.get('date')),
+            'time': t.get('time'),
+            'start_time': t.get('start_time'),
+            'end_time': t.get('end_time'),
+            'location': t.get('location'),
+            'is_cancelled': is_cancelled,
+            'my_status': status,
+            'my_reason': reason,
+            'position_summary': position_summary,
+            'summary_loaded': load_summary_now,
+        })
+
+    return cards
+
+
 def _visible_team_codes(current_user):
     if not current_user:
         return []
@@ -169,45 +214,40 @@ def index():
         return redirect(url_for('auth.login', next=request.full_path if request.query_string else request.path))
 
     # Fetch trainings from tt-agenda
-    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None, limit=1)
     _cleanup_cancelled_trainings(trainings)
     position_groups = fetch_position_groups()
 
-    # Get user's existing attendances
-    my_attendances = {
-        a.training_id: a
-        for a in Attendance.query.filter_by(user_id=current_user['id']).all()
-    }
-
-    trainings_with_status = []
-    for t in trainings:
-        aid = str(t.get('id', ''))
-        attendance = my_attendances.get(aid)
-        status = attendance.status if attendance else None
-        reason = attendance.reason if attendance else None
-        trainings_with_status.append({
-            'id': aid,
-            'title': t.get('title', 'Training'),
-            'team_code': t.get('team_code'),
-            'date': t.get('date'),
-            'date_label': _format_date_label(t.get('date')),
-            'time': t.get('time'),
-            'start_time': t.get('start_time'),
-            'end_time': t.get('end_time'),
-            'location': t.get('location'),
-            'is_cancelled': bool(t.get('is_cancelled', False)),
-            'my_status': status,
-            'my_reason': reason,
-            'position_summary': summarize_training_attendance(aid, position_groups)['position_summary'],
-        })
+    trainings_with_status = _build_training_cards(current_user, trainings, position_groups, load_first_summary_only=True)
 
     return render_template(
         'attendance.html',
         current_user=current_user,
         trainings=trainings_with_status,
+        has_more_trainings=bool(trainings and len(trainings) == 1),
         is_coach=_is_coach_user(current_user),
         active_tab='attendance',
     )
+
+
+@bp.route('/api/trainings/deferred', methods=['GET'])
+def deferred_trainings():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'error': 'authentication_required'}), 401
+
+    all_trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    if not all_trainings:
+        return jsonify({'html': '', 'count': 0})
+
+    position_groups = fetch_position_groups()
+    trainings_with_status = _build_training_cards(current_user, all_trainings[1:], position_groups, load_first_summary_only=False)
+
+    html = ''.join(
+        render_template('attendance_card.html', t=t, is_coach=_is_coach_user(current_user))
+        for t in trainings_with_status
+    )
+    return jsonify({'html': html, 'count': len(trainings_with_status)})
 
 
 @bp.route('/coach')

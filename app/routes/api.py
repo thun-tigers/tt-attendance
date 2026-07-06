@@ -36,6 +36,7 @@ def handle_attendance(occurrence_id):
     """Set or get attendance status for a specific training occurrence."""
     current_user = get_current_user()
     training = fetch_training_occurrence_from_agenda(occurrence_id)
+    summary_only = (request.args.get('summary_only') or '').strip().lower() in {'1', 'true', 'yes'}
     if training and training.get('is_cancelled'):
         _cleanup_cancelled_training(occurrence_id)
         if request.method == 'GET':
@@ -55,20 +56,6 @@ def handle_attendance(occurrence_id):
         attendances = training_summary['attendances']
         summary = training_summary['summary']
 
-        # Fetch user details from tt-auth
-        participants = []
-        for a in attendances:
-            summary[a.status] = summary.get(a.status, 0) + 1
-            user_info = fetch_user_from_auth(a.user_id) or {'id': a.user_id, 'username': f'User {a.user_id}'}
-            participants.append({
-                'user_id': a.user_id,
-                'username': user_info.get('username'),
-                'display_name': user_info.get('display_name'),
-                'status': a.status,
-                'reason': a.reason,
-                'updated_at': a.updated_at.isoformat() if a.updated_at else None,
-            })
-
         # Current user's status
         my_status = None
         if current_user:
@@ -79,13 +66,30 @@ def handle_attendance(occurrence_id):
             if my_entry:
                 my_status = my_entry.status
 
-        return jsonify({
+        payload = {
             'training_id': occurrence_id,
             'summary': summary,
             'position_summary': training_summary['position_summary'],
-            'participants': participants,
             'my_status': my_status,
-        })
+        }
+
+        if not summary_only:
+            # Fetch user details from tt-auth only when the full participant list is requested.
+            participants = []
+            for a in attendances:
+                summary[a.status] = summary.get(a.status, 0) + 1
+                user_info = fetch_user_from_auth(a.user_id) or {'id': a.user_id, 'username': f'User {a.user_id}'}
+                participants.append({
+                    'user_id': a.user_id,
+                    'username': user_info.get('username'),
+                    'display_name': user_info.get('display_name'),
+                    'status': a.status,
+                    'reason': a.reason,
+                    'updated_at': a.updated_at.isoformat() if a.updated_at else None,
+                })
+            payload['participants'] = participants
+
+        return jsonify(payload)
 
     # POST: Set attendance status
     if not current_user:

@@ -26,9 +26,11 @@
   <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 sm:mb-5">Melde dich für die kommenden Trainings an oder ab</p>
 
   {% if trainings %}
-  <div class="grid gap-3">
+  <div id="training-list" class="grid gap-3">
     {% for t in trainings %}
-    <div class="training-card rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full" data-training-id="{{ t.id }}">
+    <div class="training-card rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full"
+         data-training-id="{{ t.id }}"
+         data-summary-loaded="{{ 'true' if t.summary_loaded else 'false' }}">
       {% set status_meta = {
         'attending': {
           'label': 'Dabei',
@@ -162,19 +164,29 @@
 
         <div class="attendance-summary mt-3">
           <div class="position-summary flex flex-wrap gap-1.5" aria-label="Zusagen pro Gruppe">
-            {% for group in t.position_summary %}
-            <span
-              class="position-badge inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300"
-              data-position-key="{{ group.key }}">
-              <span>{{ group.key }}</span>
-              <span class="position-count rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-1.5 text-emerald-700 dark:text-emerald-300">{{ group.attending }}</span>
-            </span>
-            {% endfor %}
+            {% if t.position_summary %}
+              {% for group in t.position_summary %}
+              <span
+                class="position-badge inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300"
+                data-position-key="{{ group.key }}">
+                <span>{{ group.key }}</span>
+                <span class="position-count rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-1.5 text-emerald-700 dark:text-emerald-300">{{ group.attending }}</span>
+              </span>
+              {% endfor %}
+            {% else %}
+              <span class="summary-loading inline-flex items-center gap-1 rounded-full border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 px-2 py-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                <i class="bi bi-hourglass-split"></i>
+                Wird geladen
+              </span>
+            {% endif %}
           </div>
         </div>
       </div>
     </div>
     {% endfor %}
+  </div>
+  <div id="training-list-loader" class="hidden mt-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 px-4 py-4 text-sm text-slate-500 dark:text-slate-400">
+    Weitere Trainings werden geladen.
   </div>
   {% else %}
   <!-- Empty state -->
@@ -290,18 +302,90 @@ function escapeHtml(value) {
 }
 
 // Load summaries on page load
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.training-card[data-training-id]').forEach(card => {
-    const trainingId = card.dataset.trainingId;
-    fetch(`/api/trainings/${trainingId}/attendance`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.summary) {
-          updateSummary(card, data.summary, data.position_summary);
-        }
-      })
-      .catch(() => {});
+function loadSummaryForCard(card) {
+  if (!card || card.dataset.summaryLoaded === 'true' || card.dataset.summaryLoading === 'true') {
+    return;
+  }
+  card.dataset.summaryLoading = 'true';
+  const trainingId = card.dataset.trainingId;
+  fetch(`/api/trainings/${trainingId}/attendance?summary_only=1`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.summary) {
+        updateSummary(card, data.summary, data.position_summary);
+        card.dataset.summaryLoaded = 'true';
+        card.dataset.summaryLoading = 'false';
+      }
+    })
+    .catch(() => {
+      card.dataset.summaryLoading = 'false';
   });
+}
+
+function observeCards(cards) {
+  const pending = cards.filter(card => card && card.dataset.summaryLoaded !== 'true');
+  if (!pending.length) {
+    return;
+  }
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          loadSummaryForCard(entry.target);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '240px 0px' });
+    pending.forEach(card => observer.observe(card));
+    return;
+  }
+  pending.forEach(card => loadSummaryForCard(card));
+}
+
+function appendDeferredTrainings(html) {
+  if (!html) {
+    return;
+  }
+  const list = document.getElementById('training-list');
+  if (!list) {
+    return;
+  }
+  const template = document.createElement('template');
+  template.innerHTML = html.trim();
+  const cards = Array.from(template.content.querySelectorAll('.training-card'));
+  list.appendChild(template.content);
+  observeCards(cards);
+}
+
+function loadDeferredTrainings() {
+  const loader = document.getElementById('training-list-loader');
+  fetch('/api/trainings/deferred')
+    .then(r => r.json())
+    .then(data => {
+      if (loader) {
+        loader.classList.add('hidden');
+      }
+      appendDeferredTrainings(data.html || '');
+    })
+    .catch(() => {
+      if (loader) {
+        loader.textContent = 'Weitere Trainings konnten nicht geladen werden.';
+        loader.classList.remove('hidden');
+      }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  observeCards(Array.from(document.querySelectorAll('.training-card[data-training-id]')));
+  const loader = document.getElementById('training-list-loader');
+  if (loader) {
+    loader.classList.remove('hidden');
+  }
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(loadDeferredTrainings, { timeout: 1000 });
+  } else {
+    setTimeout(loadDeferredTrainings, 100);
+  }
 });
 </script>
 {% endblock %}

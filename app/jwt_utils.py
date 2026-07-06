@@ -48,7 +48,7 @@ def fetch_user_from_auth(user_id):
     return None
 
 
-def fetch_trainings_from_agenda_for_teams(team_codes=None):
+def fetch_trainings_from_agenda_for_teams(team_codes=None, limit=None):
     """Fetch upcoming trainings from tt-agenda, optionally filtered by teams."""
     agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
     secret = current_app.config.get('INTERNAL_API_SECRET')
@@ -61,6 +61,8 @@ def fetch_trainings_from_agenda_for_teams(team_codes=None):
         })
         if normalized:
             params['teams'] = ','.join(normalized)
+    if limit is not None:
+        params['limit'] = str(int(limit))
     try:
         resp = requests.get(
             f'{agenda_url}/api/trainings',

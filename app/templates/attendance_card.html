@@ -1,0 +1,155 @@
+<div class="training-card rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full"
+     data-training-id="{{ t.id }}"
+     data-summary-loaded="{{ 'true' if t.summary_loaded else 'false' }}">
+  {% set status_meta = {
+    'attending': {
+      'label': 'Dabei',
+      'icon': 'bi-hand-thumbs-up-fill',
+      'tone': 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+      'button': 'bg-emerald-600 text-white border-emerald-600 shadow-sm',
+      'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300',
+    },
+    'maybe': {
+      'label': 'Unsicher',
+      'icon': 'bi-question-circle-fill',
+      'tone': 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+      'button': 'bg-slate-700 text-white border-slate-700 shadow-sm',
+      'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200',
+    },
+    'declined': {
+      'label': 'Absage',
+      'icon': 'bi-hand-thumbs-down-fill',
+      'tone': 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+      'button': 'bg-rose-600 text-white border-rose-600 shadow-sm',
+      'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-700 dark:hover:text-rose-300',
+    }
+  } %}
+  {% set current_status = status_meta.get(t.my_status) %}
+  {% set is_cancelled = t.is_cancelled %}
+
+  <div class="bg-indigo-50/70 dark:bg-slate-800/70 px-3 sm:px-4 py-3 sm:py-3.5 border-b border-slate-200/70 dark:border-slate-700/70">
+    <div class="flex items-start gap-3">
+      <div class="w-20 shrink-0 rounded-xl bg-white/90 dark:bg-slate-900/80 ring-1 ring-slate-200 dark:ring-slate-700 px-2.5 py-2 text-center leading-tight">
+        <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-700 dark:text-indigo-300">{{ t.date_label.split(' ')[0] if t.date_label else '—' }}</div>
+        <div class="text-[11px] font-semibold text-slate-700 dark:text-slate-200">{{ t.date_label.split(' ', 1)[1] if t.date_label and ' ' in t.date_label else (t.date_label or '—') }}</div>
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start gap-2 justify-between">
+          {% if is_coach %}
+          <a href="{{ url_for('attendance.coach_training_detail', occurrence_id=t.id) }}"
+             class="group min-w-0 rounded-lg -m-1 p-1 transition hover:bg-white/70 dark:hover:bg-slate-900/50"
+             title="Präsenzliste öffnen">
+            <h3 class="font-bold text-[0.98rem] leading-tight truncate group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
+              {{ t.title }}
+              <i class="bi bi-box-arrow-up-right ml-1 text-[0.7rem] opacity-50 group-hover:opacity-100"></i>
+            </h3>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+              <span class="inline-flex items-center gap-1">
+                <i class="bi bi-clock"></i>
+                {{ t.start_time or '—' }}{% if t.start_time or t.end_time %}–{{ t.end_time or '—' }}{% endif %}
+              </span>
+              <span class="inline-flex items-center gap-1">
+                <i class="bi bi-people"></i>
+                {{ t.team_code or '—' }}
+              </span>
+            </div>
+          </a>
+          {% else %}
+          <div class="min-w-0">
+            <h3 class="font-bold text-[0.98rem] leading-tight truncate">{{ t.title }}</h3>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+              <span class="inline-flex items-center gap-1">
+                <i class="bi bi-clock"></i>
+                {{ t.start_time or '—' }}{% if t.start_time or t.end_time %}–{{ t.end_time or '—' }}{% endif %}
+              </span>
+              <span class="inline-flex items-center gap-1">
+                <i class="bi bi-people"></i>
+                {{ t.team_code or '—' }}
+              </span>
+            </div>
+          </div>
+          {% endif %}
+          {% if is_cancelled %}
+          <span class="shrink-0 inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300">
+            Abgesagt
+          </span>
+          {% elif current_status %}
+          <span class="shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold {{ current_status.tone }}">
+            <i class="bi {{ current_status.icon }}"></i>{{ current_status.label }}
+          </span>
+          {% else %}
+          <span class="shrink-0 inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300">
+            Noch offen
+          </span>
+          {% endif %}
+        </div>
+        {% if t.location %}
+        <div class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+          <i class="bi bi-geo-alt"></i>
+          <span>{{ t.location }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if is_cancelled %}
+  <div class="px-3 sm:px-4 py-3 sm:py-3 border-b border-slate-200/70 dark:border-slate-700/70">
+    <div class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 text-[11px] font-medium text-rose-700 dark:text-rose-300">
+      <i class="bi bi-x-circle-fill"></i>
+      <span>Termin abgesagt. Anmeldung ist deaktiviert.</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="px-3 sm:px-4 py-3">
+    {% if is_cancelled %}
+    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-3 text-sm text-slate-500 dark:text-slate-300 text-center">
+      Keine Anmeldung möglich, weil dieser Termin abgesagt wurde.
+    </div>
+    {% else %}
+    <div class="status-strip grid grid-cols-3 gap-2" role="group" aria-label="Anmeldestatus">
+      {% set statuses = [
+        ('attending', 'bi-hand-thumbs-up-fill', 'Dabei'),
+        ('maybe', 'bi-question-circle-fill', 'Unsicher'),
+        ('declined', 'bi-hand-thumbs-down-fill', 'Absage'),
+      ] %}
+      {% for val, icon, label in statuses %}
+      <button
+        class="status-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] font-semibold transition-all border-2 min-h-[3.2rem]
+          {% if t.my_status == val %}{{ status_meta[val].button }}{% else %}{{ status_meta[val].button_idle }}{% endif %}"
+        data-training-id="{{ t.id }}"
+        data-status="{{ val }}"
+        data-selected="{{ 'true' if t.my_status == val else 'false' }}"
+        aria-pressed="{{ 'true' if t.my_status == val else 'false' }}"
+        data-icon="{{ icon }}"
+        data-label="{{ label }}"
+        onclick="setStatus(this, '{{ t.id }}', '{{ val }}')">
+        <i class="bi {{ icon }} text-base leading-none"></i>
+        <span class="leading-none">{{ label }}</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="attendance-summary mt-3">
+      <div class="position-summary flex flex-wrap gap-1.5" aria-label="Zusagen pro Gruppe">
+        {% if t.position_summary %}
+          {% for group in t.position_summary %}
+          <span
+            class="position-badge inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300"
+            data-position-key="{{ group.key }}">
+            <span>{{ group.key }}</span>
+            <span class="position-count rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-1.5 text-emerald-700 dark:text-emerald-300">{{ group.attending }}</span>
+          </span>
+          {% endfor %}
+        {% else %}
+          <span class="summary-loading inline-flex items-center gap-1 rounded-full border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 px-2 py-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+            <i class="bi bi-hourglass-split"></i>
+            Wird geladen
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
