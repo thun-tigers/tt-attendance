@@ -47,6 +47,16 @@ def create_app(config_class=Config):
     app.register_blueprint(attendance_bp)
     app.register_blueprint(api_bp)
 
+    # Zentrales UI-Layout aus tt-common
+    from tt_common import register_shared_ui
+    register_shared_ui(
+        app,
+        brand_label='Attendance',
+        brand_icon='bi-calendar-check',
+        home_endpoint='attendance.index',
+        logout_endpoint='auth.logout',
+    )
+
     # Health endpoint
     @app.route('/health')
     def health():

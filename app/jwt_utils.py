@@ -18,17 +18,13 @@ def create_sso_token():
 
 
 def verify_sso_token(token):
-    """Verify an incoming SSO token from another service."""
-    try:
-        payload = jwt.decode(
-            token,
-            current_app.config['SSO_SHARED_SECRET'],
-            audience=current_app.config['SSO_EXPECTED_AUDIENCE'],
-            algorithms=['HS256'],
-        )
-        return payload
-    except (jwt.ExpiredSignatureError, jwt.InvalidAudienceError, jwt.InvalidTokenError):
-        return None
+    """Verify an incoming SSO token from another service.
+
+    Delegiert an die zentrale Implementierung in tt_common; als duenner Wrapper
+    erhalten, damit bestehende Aufrufer unveraendert weiterlaufen.
+    """
+    from tt_common.sso import validate_sso_token
+    return validate_sso_token(token)
 
 
 def fetch_user_from_auth(user_id):

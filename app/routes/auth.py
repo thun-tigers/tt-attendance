@@ -1,11 +1,12 @@
-from urllib.parse import urlencode, urljoin, urlparse
-
 from flask import Blueprint, current_app, flash, redirect, request, session, url_for
+
+from tt_common.sso import get_auth_login_url, get_auth_logout_url, is_safe_url
 
 from ..authz import normalize_auth_payload
 from ..extensions import db
 from ..jwt_utils import verify_sso_token
 from ..models import User
+from ..sso_replay import is_replayed_sso_token
 
 bp = Blueprint('auth', __name__)
 
@@ -16,14 +17,6 @@ def _merge_claims(*sources):
         if isinstance(source, dict):
             claims.update(source)
     return claims
-
-
-def get_auth_login_url(next_page=None):
-    auth_base_url = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
-    query = {'next_service': 'tt-attendance'}
-    if next_page:
-        query['next'] = next_page
-    return f'{auth_base_url}/?{urlencode(query)}'
 
 
 def get_current_user():
@@ -53,14 +46,13 @@ def get_current_user():
 
 @bp.route('/login')
 def login():
-    return redirect(get_auth_login_url(request.args.get('next')))
+    return redirect(get_auth_login_url('tt-attendance', request.args.get('next')))
 
 
 @bp.route('/logout', methods=['GET', 'POST'])
 def logout():
     session.clear()
-    auth_base_url = current_app.config.get('AUTH_BASE_URL', 'http://localhost:8085').rstrip('/')
-    return redirect(f'{auth_base_url}/logout')
+    return redirect(get_auth_logout_url())
 
 
 @bp.route('/auth/sso')
@@ -73,6 +65,10 @@ def sso_login():
     payload = verify_sso_token(token)
     if not payload:
         flash('Ungültiger SSO-Token.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    if is_replayed_sso_token(payload):
+        flash('SSO-Token wurde bereits verwendet. Bitte erneut anmelden.', 'danger')
         return redirect(url_for('auth.login'))
 
     auth = normalize_auth_payload(payload)
@@ -106,10 +102,7 @@ def sso_login():
     session['claims_json'] = user.claims_json
 
     next_page = request.args.get('next')
-    if next_page:
-        ref_url = urlparse(request.host_url)
-        test_url = urlparse(urljoin(request.host_url, next_page))
-        if test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc:
-            return redirect(next_page)
+    if next_page and is_safe_url(next_page):
+        return redirect(next_page)
 
     return redirect(url_for('attendance.index'))

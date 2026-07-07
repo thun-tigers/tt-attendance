@@ -27,6 +27,8 @@ class Config:
     TT_INFRA_INTERNAL_URL = os.environ.get('TT_INFRA_INTERNAL_URL', 'http://tt-infra:5000')
     SSO_SHARED_SECRET = os.environ.get('SSO_SHARED_SECRET') or SECRET_KEY
     SSO_EXPECTED_AUDIENCE = os.environ.get('SSO_EXPECTED_AUDIENCE', 'tt-attendance')
+    SSO_REPLAY_STORAGE_URI = os.environ.get('SSO_REPLAY_STORAGE_URI', '')
+    SSO_REPLAY_TTL_SECONDS = int(os.environ.get('SSO_REPLAY_TTL_SECONDS', 300))
     SSO_TOKEN_EXPIRY_SECONDS = int(os.environ.get('SSO_TOKEN_EXPIRY_SECONDS', 60))
     INTERNAL_API_SECRET = os.environ.get('INTERNAL_API_SECRET') or 'tt-internal-dev-secret-change-me'
     RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
