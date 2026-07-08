@@ -21,10 +21,10 @@ class Config:
 
     # SSO / Auth
     AUTH_BASE_URL = os.environ.get('AUTH_BASE_URL', 'http://localhost:8085')
-    TT_AUTH_INTERNAL_URL = os.environ.get('TT_AUTH_INTERNAL_URL', 'http://tt-auth:5000')
-    TT_MEMBERS_INTERNAL_URL = os.environ.get('TT_MEMBERS_INTERNAL_URL', 'http://tt-members:5000')
-    TT_AGENDA_INTERNAL_URL = os.environ.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
-    TT_INFRA_INTERNAL_URL = os.environ.get('TT_INFRA_INTERNAL_URL', 'http://tt-infra:5000')
+    TT_AUTH_INTERNAL_URL = os.environ.get('TT_AUTH_INTERNAL_URL')
+    TT_MEMBERS_INTERNAL_URL = os.environ.get('TT_MEMBERS_INTERNAL_URL')
+    TT_AGENDA_INTERNAL_URL = os.environ.get('TT_AGENDA_INTERNAL_URL')
+    TT_INFRA_INTERNAL_URL = os.environ.get('TT_INFRA_INTERNAL_URL')
     SSO_SHARED_SECRET = os.environ.get('SSO_SHARED_SECRET') or SECRET_KEY
     SSO_EXPECTED_AUDIENCE = os.environ.get('SSO_EXPECTED_AUDIENCE', 'tt-attendance')
     SSO_REPLAY_STORAGE_URI = os.environ.get('SSO_REPLAY_STORAGE_URI', '')
