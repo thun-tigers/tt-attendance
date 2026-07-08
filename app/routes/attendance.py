@@ -211,7 +211,7 @@ def index():
     if not current_user:
         from flask import session as flask_session
         flask_session['next_after_login'] = request.url
-        return redirect(url_for('auth.login', next=request.full_path if request.query_string else request.path))
+        return redirect(url_for('auth.login', next=request.url))
 
     # Fetch trainings from tt-agenda
     trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None, limit=1)

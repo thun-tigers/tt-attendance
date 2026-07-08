@@ -3,6 +3,7 @@ import logging
 import requests
 from flask import Flask, session
 from sqlalchemy import inspect, text
+from werkzeug.middleware.proxy_fix import ProxyFix
 from .config import Config
 from .extensions import db, migrate, limiter
 from .models import User
@@ -84,6 +85,7 @@ def create_app(config_class=Config):
             db.create_all()
             _ensure_attendance_columns()
 
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     return app
 
 
