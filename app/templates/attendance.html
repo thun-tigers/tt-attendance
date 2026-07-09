@@ -22,13 +22,16 @@
   }
 </style>
 <div class="max-w-5xl mx-auto">
-  <h1 class="text-lg sm:text-xl font-bold mb-1">Trainings-Anmeldung</h1>
-  <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 sm:mb-5">Melde dich für die kommenden Trainings an oder ab</p>
+  <div class="tt-page-hero mb-4 sm:mb-5">
+    <p class="tt-eyebrow">Dein Training</p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight">Trainings-Anmeldung</h1>
+    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Wähle für jeden Termin deinen Status – deine Antwort wird sofort gespeichert.</p>
+  </div>
 
   {% if trainings %}
   <div id="training-list" class="grid gap-3">
     {% for t in trainings %}
-    <div class="training-card rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full"
+    <div class="training-card tt-status-card tt-status-card--compact {{ 'tt-status-danger' if t.is_cancelled or t.my_status == 'declined' else ('tt-status-success' if t.my_status == 'attending' else ('tt-status-neutral' if t.my_status == 'maybe' else 'tt-status-info')) }}"
          data-training-id="{{ t.id }}"
          data-summary-loaded="{{ 'true' if t.summary_loaded else 'false' }}">
       {% set status_meta = {
