@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag (e.g. dev, hotfix, test)"
+        description: "Image tag to publish (e.g. dev, hotfix, test)"
         required: true
         default: dev
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -15,6 +16,10 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.tag }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -33,18 +38,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate image tag
+        id: prepare
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="$(printf '%s' "$INPUT_TAG" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+
+          if [ -z "$tag" ]; then
+            echo "Image tag must not be empty." >&2
+            exit 1
+          fi
+
+          if [[ ! "$tag" =~ ^[a-z0-9_][a-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid Docker tag: $tag" >&2
+            exit 1
+          fi
+
+          image_ref="${REGISTRY}/${IMAGE_NAME}:${tag}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag }}
+          tags: ${{ steps.prepare.outputs.image_ref }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
 
       - name: Image summary
+        shell: bash
         run: |
           echo "## Manual build published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: \`${{ steps.prepare.outputs.image_ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
