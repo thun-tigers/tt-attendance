@@ -53,7 +53,7 @@ def _format_date_label(date_iso):
     return f'{weekday} {dt.strftime("%d.%m.%Y")}'
 
 
-def _build_training_cards(current_user, trainings, position_groups, load_first_summary_only=False):
+def _build_training_cards(current_user, trainings, position_groups, load_first_summary_only=False, load_all_summaries=False):
     my_attendances = {
         a.training_id: a
         for a in Attendance.query.filter_by(user_id=current_user['id']).all()
@@ -68,9 +68,11 @@ def _build_training_cards(current_user, trainings, position_groups, load_first_s
         reason = attendance.reason if attendance else None
         is_cancelled = bool(t.get('is_cancelled', False))
         load_summary_now = (
-            load_first_summary_only
-            and not first_summary_loaded
-            and not is_cancelled
+            not is_cancelled
+            and (
+                load_all_summaries
+                or (load_first_summary_only and not first_summary_loaded)
+            )
         )
         if load_summary_now:
             first_summary_loaded = True
@@ -214,17 +216,22 @@ def index():
         return redirect(url_for('auth.login', next=request.url))
 
     # Fetch trainings from tt-agenda
-    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None, limit=1)
+    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None, limit=10)
     _cleanup_cancelled_trainings(trainings)
     position_groups = fetch_position_groups()
 
-    trainings_with_status = _build_training_cards(current_user, trainings, position_groups, load_first_summary_only=True)
+    trainings_with_status = _build_training_cards(
+        current_user,
+        trainings,
+        position_groups,
+        load_all_summaries=True,
+    )
 
     return render_template(
         'attendance.html',
         current_user=current_user,
         trainings=trainings_with_status,
-        has_more_trainings=bool(trainings and len(trainings) == 1),
+        has_more_trainings=bool(trainings and len(trainings) == 10),
         is_coach=_is_coach_user(current_user),
         active_tab='attendance',
     )
@@ -238,16 +245,36 @@ def deferred_trainings():
 
     all_trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
     if not all_trainings:
-        return jsonify({'html': '', 'count': 0})
+        return jsonify({'html': '', 'count': 0, 'has_more': False, 'offset': 0, 'limit': 0})
+
+    offset = request.args.get('offset', type=int)
+    if offset is None or offset < 0:
+        offset = 0
+    limit = request.args.get('limit', type=int)
+    if limit is None or limit <= 0:
+        limit = 20
 
     position_groups = fetch_position_groups()
-    trainings_with_status = _build_training_cards(current_user, all_trainings[1:], position_groups, load_first_summary_only=False)
+    deferred_trainings = all_trainings[1 + offset:1 + offset + limit]
+    trainings_with_status = _build_training_cards(
+        current_user,
+        deferred_trainings,
+        position_groups,
+        load_all_summaries=True,
+    )
 
     html = ''.join(
         render_template('attendance_card.html', t=t, is_coach=_is_coach_user(current_user))
         for t in trainings_with_status
     )
-    return jsonify({'html': html, 'count': len(trainings_with_status)})
+    has_more = 1 + offset + len(deferred_trainings) < len(all_trainings)
+    return jsonify({
+        'html': html,
+        'count': len(trainings_with_status),
+        'offset': offset,
+        'limit': limit,
+        'has_more': has_more,
+    })
 
 
 @bp.route('/coach')
@@ -302,7 +329,7 @@ def coach_training_detail(occurrence_id):
         return redirect(url_for('attendance.index'))
 
     # Fetch training info from agenda
-    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
+    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
     training = {}
     try:
         from ..jwt_utils import create_sso_token

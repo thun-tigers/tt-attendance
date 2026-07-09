@@ -188,7 +188,7 @@ def test_attendance_card_renders_time_in_header_and_position_badges(client, app,
     assert '/coach/training/training-1' in body
 
 
-def test_attendance_index_only_preloads_first_training_summary(client, app, monkeypatch):
+def test_attendance_index_preloads_all_visible_training_summaries(client, app, monkeypatch):
     user_id = _make_user(app)
     summary_calls = []
     captured = {}
@@ -241,11 +241,11 @@ def test_attendance_index_only_preloads_first_training_summary(client, app, monk
     assert response.status_code == 200
     context = captured['context']
     assert captured['template_name'] == 'attendance.html'
-    assert summary_calls == ['training-1']
+    assert summary_calls == ['training-1', 'training-2']
     assert context['trainings'][0]['summary_loaded'] is True
     assert context['trainings'][0]['position_summary'] == [{'key': 'OL', 'label': 'Offense Line', 'attending': 3}]
-    assert context['trainings'][1]['summary_loaded'] is False
-    assert context['trainings'][1]['position_summary'] == []
+    assert context['trainings'][1]['summary_loaded'] is True
+    assert context['trainings'][1]['position_summary'] == [{'key': 'OL', 'label': 'Offense Line', 'attending': 3}]
 
 
 def test_attendance_summary_only_skips_participants(client, app, monkeypatch):
@@ -299,6 +299,39 @@ def test_attendance_deferred_trainings_returns_fragment(client, app, monkeypatch
     payload = response.get_json()
     assert 'Zweites Training' in payload['html']
     assert 'Erstes Training' not in payload['html']
+    assert payload['has_more'] is False
+
+
+def test_attendance_deferred_trainings_supports_batched_loading(client, app, monkeypatch):
+    user_id = _make_user(app)
+
+    monkeypatch.setattr(attendance_routes, 'fetch_position_groups', lambda: [])
+    monkeypatch.setattr(attendance_routes, 'fetch_trainings_from_agenda_for_teams', lambda team_codes=None, limit=None: [
+        {'id': 'training-1', 'title': 'Erstes Training', 'team_code': 'SENIORS', 'date': '2026-07-08', 'start_time': '19:30', 'end_time': '21:00', 'location': 'Stadion'},
+        {'id': 'training-2', 'title': 'Zweites Training', 'team_code': 'SENIORS', 'date': '2026-07-10', 'start_time': '19:30', 'end_time': '21:00', 'location': 'Stadion'},
+        {'id': 'training-3', 'title': 'Drittes Training', 'team_code': 'SENIORS', 'date': '2026-07-12', 'start_time': '19:30', 'end_time': '21:00', 'location': 'Stadion'},
+        {'id': 'training-4', 'title': 'Viertes Training', 'team_code': 'SENIORS', 'date': '2026-07-14', 'start_time': '19:30', 'end_time': '21:00', 'location': 'Stadion'},
+    ])
+    monkeypatch.setattr(attendance_routes, 'render_template', lambda template_name, **context: f"<div class='training-card'>{context['t']['title']}</div>")
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['claims_json'] = {
+            'memberships': [{'team_code': 'SENIORS', 'is_active': True}],
+            'teams': ['SENIORS'],
+            'permissions': [],
+            'member_roles': ['player'],
+        }
+
+    response = client.get('/api/trainings/deferred?offset=0&limit=2')
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert 'Zweites Training' in payload['html']
+    assert 'Drittes Training' in payload['html']
+    assert 'Viertes Training' not in payload['html']
+    assert payload['count'] == 2
+    assert payload['has_more'] is True
 
 
 def test_coach_presence_api_marks_user_attending(client, app):

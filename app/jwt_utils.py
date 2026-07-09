@@ -29,7 +29,7 @@ def verify_sso_token(token):
 
 def fetch_user_from_auth(user_id):
     """Fetch user info from tt-auth via internal API."""
-    auth_url = current_app.config.get('TT_AUTH_INTERNAL_URL', 'http://tt-auth:5000')
+    auth_url = current_app.config.get('TT_AUTH_INTERNAL_URL') or 'http://tt-auth:5000'
     secret = current_app.config.get('INTERNAL_API_SECRET')
     try:
         resp = requests.get(
@@ -46,7 +46,7 @@ def fetch_user_from_auth(user_id):
 
 def fetch_trainings_from_agenda_for_teams(team_codes=None, limit=None):
     """Fetch upcoming trainings from tt-agenda, optionally filtered by teams."""
-    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
+    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
     secret = current_app.config.get('INTERNAL_API_SECRET')
     params = {}
     if team_codes:
@@ -84,7 +84,7 @@ def fetch_trainings_from_agenda_for_teams(team_codes=None, limit=None):
 
 def fetch_training_occurrence_from_agenda(occurrence_id, team_codes=None):
     """Fetch a single training occurrence from tt-agenda."""
-    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
+    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
     secret = current_app.config.get('INTERNAL_API_SECRET')
     params = {}
     if team_codes:

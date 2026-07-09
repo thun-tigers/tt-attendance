@@ -93,7 +93,7 @@ def _fetch_pending_messages_count(app, auth_user_id):
     if not auth_user_id:
         return 0
 
-    members_base = app.config.get('TT_MEMBERS_INTERNAL_URL', 'http://tt-members:5000').rstrip('/')
+    members_base = (app.config.get('TT_MEMBERS_INTERNAL_URL') or 'http://tt-members:5000').rstrip('/')
     secret = app.config.get('INTERNAL_API_SECRET') or app.config.get('SSO_SHARED_SECRET') or app.config.get('SECRET_KEY')
     if not secret:
         return 0

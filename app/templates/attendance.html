@@ -357,22 +357,37 @@ function appendDeferredTrainings(html) {
   observeCards(cards);
 }
 
-function loadDeferredTrainings() {
+const DEFERRED_BATCH_SIZE = 20;
+
+async function loadDeferredTrainings(offset = 0) {
+  const numericOffset = Number.isFinite(offset) ? offset : Number(offset) || 0;
   const loader = document.getElementById('training-list-loader');
-  fetch('/api/trainings/deferred')
-    .then(r => r.json())
-    .then(data => {
+  try {
+    const response = await fetch(`/api/trainings/deferred?offset=${numericOffset}&limit=${DEFERRED_BATCH_SIZE}`);
+    if (!response.ok) {
+      throw new Error(`deferred trainings request failed with ${response.status}`);
+    }
+    const data = await response.json();
+    appendDeferredTrainings(data.html || '');
+
+    if (data.has_more && Number(data.count || 0) > 0) {
       if (loader) {
-        loader.classList.add('hidden');
-      }
-      appendDeferredTrainings(data.html || '');
-    })
-    .catch(() => {
-      if (loader) {
-        loader.textContent = 'Weitere Trainings konnten nicht geladen werden.';
         loader.classList.remove('hidden');
+        loader.textContent = 'Weitere Trainings werden geladen.';
       }
-    });
+      await loadDeferredTrainings(numericOffset + Number(data.count || 0));
+      return;
+    }
+
+    if (loader) {
+      loader.classList.add('hidden');
+    }
+  } catch (err) {
+    if (loader) {
+      loader.textContent = 'Weitere Trainings konnten nicht geladen werden.';
+      loader.classList.remove('hidden');
+    }
+  }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -382,9 +397,9 @@ document.addEventListener('DOMContentLoaded', function() {
     loader.classList.remove('hidden');
   }
   if ('requestIdleCallback' in window) {
-    requestIdleCallback(loadDeferredTrainings, { timeout: 1000 });
+    requestIdleCallback(() => loadDeferredTrainings(0), { timeout: 1000 });
   } else {
-    setTimeout(loadDeferredTrainings, 100);
+    setTimeout(() => loadDeferredTrainings(0), 100);
   }
 });
 </script>

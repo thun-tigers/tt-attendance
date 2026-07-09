@@ -138,7 +138,7 @@ def my_attendances():
     ).order_by(Attendance.updated_at.desc()).all()
 
     # Fetch training info from tt-agenda
-    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
+    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
     trainings = {}
     try:
         sso_token = create_sso_token()
@@ -228,7 +228,7 @@ def coach_summary():
         return _error('forbidden', 403)
 
     # Get all trainings from tt-agenda
-    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL', 'http://tt-agenda:5000')
+    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
     try:
         sso_token = create_sso_token()
         resp = requests.get(

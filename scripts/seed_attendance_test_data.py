@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Seed deterministic attendance test data for the local stack.
 
-The script uses the users already present in the tt-attendance database and
-creates or updates attendance rows for upcoming trainings from tt-agenda.
+The script pulls active members from tt-auth and creates or updates attendance
+rows for upcoming trainings from tt-agenda.
 """
 
 from __future__ import annotations
 
 import argparse
 import math
+import os
 import random
 import sys
 from dataclasses import dataclass
@@ -16,14 +17,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+import requests
+from flask import current_app
+
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
+
+def _running_inside_container() -> bool:
+    return Path('/.dockerenv').exists() or os.environ.get('RUNNING_IN_DOCKER') == '1'
+
+
+def _default_internal_url(service_name: str, host_port: int) -> str:
+    if _running_inside_container():
+        return f'http://{service_name}:5000'
+    return f'http://localhost:{host_port}'
+
 from app import create_app
+from app.config import Config
 from app.extensions import db
 from app.jwt_utils import fetch_trainings_from_agenda_for_teams
-from app.models import Attendance, User
+from app.models import Attendance
 
 
 DEFAULT_RATIOS = (
@@ -31,6 +46,17 @@ DEFAULT_RATIOS = (
     ('maybe', 0.1),
     ('declined', 0.2),
 )
+
+
+class SeedConfig(Config):
+    """Local-only config for seeding from the developer machine."""
+
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'tt-attendance-dev-secret')
+    TT_AUTH_INTERNAL_URL = os.environ.get('TT_AUTH_INTERNAL_URL') or _default_internal_url('tt-auth', 8085)
+    TT_MEMBERS_INTERNAL_URL = os.environ.get('TT_MEMBERS_INTERNAL_URL') or _default_internal_url('tt-members', 8088)
+    TT_AGENDA_INTERNAL_URL = os.environ.get('TT_AGENDA_INTERNAL_URL') or _default_internal_url('tt-agenda', 8086)
+    TT_INFRA_INTERNAL_URL = os.environ.get('TT_INFRA_INTERNAL_URL') or _default_internal_url('tt-infra', 8084)
+    INTERNAL_API_SECRET = os.environ.get('INTERNAL_API_SECRET', 'tt-internal-dev-secret-change-me')
 
 
 @dataclass(frozen=True)
@@ -72,12 +98,65 @@ def _build_assignment_list(total: int, rng: random.Random) -> list[str]:
     return assignments
 
 
-def _resolve_users(user_ids: list[int] | None = None) -> list[User]:
-    query = User.query.order_by(User.id.asc())
+def _member_id(member) -> int | None:
+    if isinstance(member, dict):
+        value = member.get('id')
+    else:
+        value = getattr(member, 'id', None)
+    return int(value) if value is not None else None
+
+
+def _auth_internal_request(method: str, path: str, *, params=None, json=None):
+    auth_base = (current_app.config.get('TT_AUTH_INTERNAL_URL') or 'http://tt-auth:5000').rstrip('/')
+    secret = current_app.config.get('INTERNAL_API_SECRET')
+    if not secret:
+        return None, 'INTERNAL_API_SECRET ist nicht konfiguriert.'
+
+    try:
+        response = requests.request(
+            method,
+            f'{auth_base}{path}',
+            params=params,
+            json=json,
+            headers={'X-TT-Internal-Secret': secret},
+            timeout=5,
+        )
+        return response, None
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+
+def _fetch_members_from_auth() -> list[dict]:
+    """Load active members from tt-auth via the team-manager list endpoint."""
+    last_error = None
+    for approver_auth_user_id in range(1, 26):
+        response, error = _auth_internal_request(
+            'GET',
+            '/api/team-manager/members',
+            params={'approver_auth_user_id': approver_auth_user_id},
+        )
+        if error:
+            last_error = error
+            continue
+        if response.status_code != 200:
+            last_error = f'{response.status_code} {response.text}'
+            continue
+        payload = response.json() or {}
+        users = payload.get('users') or []
+        if users:
+            return users
+    raise RuntimeError(
+        'No members could be loaded from tt-auth. '
+        f'Last error: {last_error or "unknown"}'
+    )
+
+
+def _resolve_members(user_ids: list[int] | None = None) -> list[dict]:
+    members = _fetch_members_from_auth()
     if user_ids:
-        query = User.query.filter(User.id.in_(user_ids)).order_by(User.id.asc())
-    users = query.all()
-    return users
+        wanted_ids = {int(user_id) for user_id in user_ids}
+        members = [member for member in members if _member_id(member) in wanted_ids]
+    return members
 
 
 def _resolve_trainings(args) -> list[dict]:
@@ -89,7 +168,7 @@ def _resolve_trainings(args) -> list[dict]:
     return trainings
 
 
-def _seed_training(training: dict, users: list[User], seed: int, clear_existing: bool) -> SeedResult:
+def _seed_training(training: dict, users: list, seed: int, clear_existing: bool) -> SeedResult:
     training_id = str(training['id'])
     rng = random.Random(_stable_seed(seed, training_id))
     assignments = _build_assignment_list(len(users), rng)
@@ -104,9 +183,12 @@ def _seed_training(training: dict, users: list[User], seed: int, clear_existing:
 
     for user, status in zip(ordered_users, assignments):
         counts[status] += 1
-        attendance = Attendance.query.filter_by(training_id=training_id, user_id=user.id).first()
+        user_id = _member_id(user)
+        if user_id is None:
+            continue
+        attendance = Attendance.query.filter_by(training_id=training_id, user_id=user_id).first()
         if attendance is None:
-            attendance = Attendance(training_id=training_id, user_id=user.id, status=status)
+            attendance = Attendance(training_id=training_id, user_id=user_id, status=status)
             db.session.add(attendance)
         else:
             attendance.status = status
@@ -178,14 +260,30 @@ def parse_args(argv: Iterable[str] | None = None):
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
-    app = create_app()
+
+    if not _running_inside_container() and not (
+        os.environ.get('SQLALCHEMY_DATABASE_URI') or os.environ.get('DATABASE_URL')
+    ):
+        print(
+            'No reachable SQLALCHEMY_DATABASE_URI found on the host. '
+            'Run the seed inside the tt-attendance container or export a host-reachable database URL.',
+            file=sys.stderr,
+        )
+        return 1
+
+    app = create_app(SeedConfig)
 
     with app.app_context():
-        users = _resolve_users(args.user_id or None)
+        try:
+            users = _resolve_members(args.user_id or None)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
         if not users:
             print(
-                'No users found in the tt-attendance database. '
-                'Sync users first or pass --user-id explicitly.',
+                'No members found in tt-auth. '
+                'Make sure tt-auth is running and contains active members.',
                 file=sys.stderr,
             )
             return 1
@@ -216,7 +314,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 f"{result.counts['attending']} attending, "
                 f"{result.counts['maybe']} maybe, "
                 f"{result.counts['declined']} declined "
-                f"for {result.total_users} users"
+                f"for {result.total_users} members"
             )
 
     return 0

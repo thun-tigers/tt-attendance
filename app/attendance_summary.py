@@ -9,7 +9,7 @@ STATUS_KEYS = ('attending', 'maybe', 'declined')
 
 def fetch_position_groups():
     """Load active position groups from tt-infra for attendance badges."""
-    infra_base = current_app.config.get('TT_INFRA_INTERNAL_URL', 'http://tt-infra:5000').rstrip('/')
+    infra_base = (current_app.config.get('TT_INFRA_INTERNAL_URL') or 'http://tt-infra:5000').rstrip('/')
     secret = current_app.config.get('INTERNAL_API_SECRET')
     fallback = [
         {'key': 'OL', 'label': 'OL'},
@@ -48,7 +48,7 @@ def fetch_position_groups():
 
 
 def fetch_member_position(auth_user_id):
-    members_base = current_app.config.get('TT_MEMBERS_INTERNAL_URL', 'http://tt-members:5000').rstrip('/')
+    members_base = (current_app.config.get('TT_MEMBERS_INTERNAL_URL') or 'http://tt-members:5000').rstrip('/')
     secret = current_app.config.get('INTERNAL_API_SECRET')
     if not secret:
         return None
