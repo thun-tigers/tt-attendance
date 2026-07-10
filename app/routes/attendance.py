@@ -279,12 +279,32 @@ def deferred_trainings():
 
 @bp.route('/coach')
 def coach_dashboard():
-    """Coach overview of all training attendances."""
+    """Open the next relevant training for coach presence marking."""
     current_user = get_current_user()
     if not current_user:
         return redirect(url_for('auth.login'))
 
-    # Check if user has coach role
+    is_coach = _is_coach_user(current_user)
+    if not is_coach:
+        return redirect(url_for('attendance.index'))
+
+    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    _cleanup_cancelled_trainings(trainings)
+
+    next_training = next((training for training in trainings if not training.get('is_cancelled')), None)
+    if next_training and next_training.get('id') is not None:
+        return redirect(url_for('attendance.coach_training_detail', occurrence_id=str(next_training['id'])))
+
+    return redirect(url_for('attendance.coach_statistics'))
+
+
+@bp.route('/coach/statistics')
+def coach_statistics():
+    """Coach overview of attendance and presence statistics."""
+    current_user = get_current_user()
+    if not current_user:
+        return redirect(url_for('auth.login'))
+
     is_coach = _is_coach_user(current_user)
     if not is_coach:
         return redirect(url_for('attendance.index'))
@@ -309,6 +329,7 @@ def coach_dashboard():
             'date': t.get('date'),
             'time': t.get('time'),
             'summary': summary,
+            'presence': _presence_counts(attendances),
             'total': len(attendances),
         })
 
@@ -317,7 +338,7 @@ def coach_dashboard():
         current_user=current_user,
         trainings=training_summaries,
         is_coach=is_coach,
-        active_tab='coach',
+        active_tab='statistics',
     )
 
 
@@ -440,6 +461,8 @@ def set_status_api(occurrence_id):
 
     if status not in ('attending', 'maybe', 'declined'):
         return jsonify({'error': 'invalid_status'}), 400
+    if status in ('maybe', 'declined') and not reason:
+        return jsonify({'error': 'reason_required'}), 400
 
     attendance = Attendance.query.filter_by(
         training_id=occurrence_id,
@@ -449,6 +472,10 @@ def set_status_api(occurrence_id):
     if attendance:
         attendance.status = status
         attendance.reason = reason
+        # A new player response starts a fresh attendance cycle. Do not keep
+        # a previous coach marking attached to the changed response.
+        attendance.presence_status = None
+        attendance.presence_marked_at = None
         attendance.updated_at = datetime.now(timezone.utc)
     else:
         attendance = Attendance(

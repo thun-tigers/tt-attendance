@@ -102,6 +102,8 @@ def handle_attendance(occurrence_id):
 
     if status not in ('attending', 'maybe', 'declined'):
         return _error('invalid_status', 400)
+    if status in ('maybe', 'declined') and not reason:
+        return _error('reason_required', 400)
 
     # Upsert
     attendance = Attendance.query.filter_by(

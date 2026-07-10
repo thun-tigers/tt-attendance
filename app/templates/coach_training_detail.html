@@ -9,35 +9,35 @@
 
 {% block content %}
 <div class="max-w-5xl mx-auto">
-  <a href="{{ url_for('attendance.coach_dashboard') }}" class="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline mb-4">
-    <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
+  <a href="{{ url_for('attendance.coach_statistics') }}" class="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline mb-4">
+    <i class="bi bi-arrow-left"></i> Zur Statistik
   </a>
 
-  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-5 mb-4 shadow-sm">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 sm:p-4 mb-3 shadow-sm">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 class="text-xl font-bold">{{ training.title or 'Training' }}</h1>
-        <div class="flex flex-wrap gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
+        <div class="flex flex-wrap gap-2 mt-1 text-sm text-slate-500 dark:text-slate-400">
           {% if training.date %}<span><i class="bi bi-calendar3 mr-1"></i>{{ training.date }}</span>{% endif %}
           {% if training.time %}<span><i class="bi bi-clock mr-1"></i>{{ training.time }}</span>{% endif %}
           {% if training.location %}<span><i class="bi bi-geo-alt mr-1"></i>{{ training.location }}</span>{% endif %}
         </div>
       </div>
       <div class="grid grid-cols-4 gap-1.5 text-center">
-        <div class="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 px-2 py-2">
-          <div class="text-lg font-bold text-emerald-700 dark:text-emerald-300">{{ summary.attending }}</div>
+        <div class="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-1.5">
+          <div class="text-base font-bold text-emerald-700 dark:text-emerald-300">{{ summary.attending }}</div>
           <div class="text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Zugesagt</div>
         </div>
-        <div class="rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-2">
-          <div class="text-lg font-bold text-slate-600 dark:text-slate-300">{{ summary.maybe }}</div>
+        <div class="rounded-lg bg-slate-100 dark:bg-slate-800 px-1.5 py-1.5">
+          <div class="text-base font-bold text-slate-600 dark:text-slate-300">{{ summary.maybe }}</div>
           <div class="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Unsicher</div>
         </div>
-        <div class="rounded-lg bg-rose-50 dark:bg-rose-900/20 px-2 py-2">
-          <div class="text-lg font-bold text-rose-700 dark:text-rose-300">{{ summary.declined }}</div>
+        <div class="rounded-lg bg-rose-50 dark:bg-rose-900/20 px-1.5 py-1.5">
+          <div class="text-base font-bold text-rose-700 dark:text-rose-300">{{ summary.declined }}</div>
           <div class="text-[10px] uppercase tracking-wide text-rose-700 dark:text-rose-300">Abgesagt</div>
         </div>
-        <div class="rounded-lg bg-indigo-50 dark:bg-indigo-900/20 px-2 py-2">
-          <div id="presentCount" class="text-lg font-bold text-indigo-700 dark:text-indigo-300">{{ presence_summary.present }}</div>
+        <div class="rounded-lg bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-1.5">
+          <div id="presentCount" class="text-base font-bold text-indigo-700 dark:text-indigo-300">{{ presence_summary.present }}</div>
           <div class="text-[10px] uppercase tracking-wide text-indigo-700 dark:text-indigo-300">OK</div>
         </div>
       </div>
@@ -45,88 +45,75 @@
   </div>
 
   {% if position_groups %}
-  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 sm:p-4 mb-4 shadow-sm">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2">
-        <i class="bi bi-funnel-fill text-indigo-500"></i>
-        Position-Filter
-      </div>
-      <div class="flex items-center gap-2">
-        <select id="positionFilter" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-          <option value="ALL">Alle Positionen</option>
-          {% for group in position_groups %}
-          <option value="{{ group.key|upper }}">{{ group.key }} · {{ group.label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if position_groups %}
-  <div class="grid gap-3">
-    {% for group in position_groups %}
-    <section class="position-group-section rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden" data-position-key="{{ group.key|upper }}">
-      <header class="flex items-center justify-between bg-slate-50 dark:bg-slate-800/70 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-        <div class="flex items-center gap-2">
-          <span class="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900/40 px-2 text-sm font-black text-indigo-700 dark:text-indigo-300">{{ group.key }}</span>
-          <div>
-            <h2 class="text-sm font-bold text-slate-900 dark:text-white">{{ group.label }}</h2>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">{{ group.total }} Rückmeldungen</p>
-          </div>
-        </div>
-      </header>
-
-      <div class="divide-y divide-slate-100 dark:divide-slate-800">
-        {% for status_key in ['attending', 'maybe', 'declined'] %}
-        {% set participants = group.statuses[status_key] %}
-        {% if participants %}
-        <div class="p-3 sm:p-4">
-          <div class="mb-2 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-bold
-            {% if status_key == 'attending' %}bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300
-            {% elif status_key == 'maybe' %}bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300
-            {% else %}bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300{% endif %}">
-            <i class="bi {{ status_meta[status_key].icon }}"></i>
-            {{ status_meta[status_key].label }} · {{ participants|length }}
-          </div>
-          <div class="grid gap-2">
-            {% for p in participants %}
-            <div class="presence-row flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/30 px-3 py-2"
-                 data-user-id="{{ p.user_id }}">
-              <div class="min-w-0 flex items-center gap-2">
-                <div class="h-8 w-8 shrink-0 rounded-full bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700 flex items-center justify-center text-xs font-black text-slate-600 dark:text-slate-300">
-                  {{ (p.display_name or p.username or '?')[0].upper() }}
-                </div>
-                <div class="min-w-0">
-                  <div class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ p.display_name or p.username }}</div>
-                  {% if p.reason %}
-                  <div class="truncate text-[11px] text-slate-500 dark:text-slate-400" title="{{ p.reason }}">
-                    <i class="bi bi-chat-quote mr-1"></i>{{ p.reason }}
-                  </div>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="presence-actions ml-auto flex shrink-0 gap-1.5 justify-end" data-state="{{ p.presence_status or '' }}">
-                <button type="button"
-                        class="presence-btn present-btn rounded-lg px-3 py-1.5 text-xs font-bold transition {{ 'bg-emerald-600 text-white' if p.presence_status == 'present' else 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300' }}"
-                        onclick="setCoachAttendance(this, '{{ occurrence_id }}', {{ p.user_id }}, 'attending')">
-                  OK
-                </button>
-                <button type="button"
-                        class="presence-btn unexcused-btn rounded-lg px-2.5 py-1.5 text-xs font-bold transition {{ 'bg-amber-500 text-white' if p.presence_status == 'unexcused' else 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700 dark:hover:text-amber-300' }}"
-                        onclick="setCoachAttendance(this, '{{ occurrence_id }}', {{ p.user_id }}, 'unexcused')">
-                  Unentschuldigt
-                </button>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
+  <div id="coachTableShell" class="mb-3">
+    <div id="coachTableToolbar" class="flex items-center justify-between gap-3 mb-3">
+      <select id="positionFilter" class="h-10 w-full sm:w-auto px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+        <option value="ALL">Alle Positionen</option>
+        {% for group in position_groups %}
+        <option value="{{ group.key|upper }}">{{ group.label or group.key }}</option>
         {% endfor %}
-      </div>
-    </section>
-    {% endfor %}
+      </select>
+    </div>
+    <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+    <table class="js-smart-table min-w-[760px] w-full text-sm" data-table-search-placeholder="Spieler suchen...">
+      <thead class="bg-slate-50 dark:bg-slate-700/50">
+        <tr>
+          <th data-filter="off" data-sort="off" class="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Aktionen</th>
+          <th data-filter="off" data-sort="off" class="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Status</th>
+          <th class="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Vorname</th>
+          <th class="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Nachname</th>
+          <th class="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Position</th>
+          <th data-filter="off" data-sort="off" class="w-12 px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Info</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for group in position_groups %}
+        {% for status_key in ['attending', 'maybe', 'declined'] %}
+        {% for p in group.statuses[status_key] %}
+        {% set name_parts = (p.display_name or p.username or '').split(' ', 1) %}
+        <tr class="presence-row hover:bg-slate-50 dark:hover:bg-slate-800/40 transition" data-position-key="{{ group.key|upper }}" data-user-id="{{ p.user_id }}">
+          <td class="px-4 py-3 whitespace-nowrap">
+            <div class="presence-actions inline-flex gap-1.5" data-state="{{ p.presence_status or '' }}">
+              <button type="button" aria-label="OK für {{ p.display_name or p.username }}" title="OK" class="presence-btn present-btn rounded-lg h-9 w-9 p-0 text-base font-bold transition inline-flex items-center justify-center {{ 'bg-emerald-600 text-white border-emerald-600' if p.presence_status == 'present' else 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20' }}" onclick="setCoachAttendance(this, '{{ occurrence_id }}', {{ p.user_id }}, 'attending')"><i class="bi bi-hand-thumbs-up-fill"></i></button>
+              <button type="button" aria-label="Unentschuldigt für {{ p.display_name or p.username }}" title="Unentschuldigt" class="presence-btn unexcused-btn rounded-lg h-9 w-9 p-0 text-base font-bold transition inline-flex items-center justify-center {{ 'bg-rose-600 text-white border-rose-600' if p.presence_status == 'unexcused' else 'bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-900/20' }}" onclick="setCoachAttendance(this, '{{ occurrence_id }}', {{ p.user_id }}, 'unexcused')"><i class="bi bi-x-lg"></i></button>
+            </div>
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap">
+            <span title="{{ status_meta[status_key].label }}" class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold
+              {% if status_key == 'attending' %}bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300
+              {% elif status_key == 'maybe' %}bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300
+              {% else %}bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300{% endif %}">
+              <i class="bi {{ status_meta[status_key].icon }}"></i><span class="hidden md:inline">{{ status_meta[status_key].label }}</span>
+            </span>
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap">
+            <div class="font-semibold text-slate-900 dark:text-white">{{ p.first_name or name_parts[0] or '–' }}</div>
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap">
+            <div class="font-semibold text-slate-900 dark:text-white">{{ p.last_name or (name_parts[1] if name_parts|length > 1 else '–') }}</div>
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap">
+            <span class="inline-flex items-center rounded-lg bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-300">{{ group.label or group.key }}</span>
+          </td>
+          <td class="w-12 max-w-xs px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+            {% if p.reason %}
+            <span title="{{ p.reason }}" class="hidden md:block truncate">{{ p.reason }}</span>
+            {% endif %}
+            <details class="md:hidden relative">
+              <summary class="list-none inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border {{ 'border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300' if p.reason else 'border-slate-200 dark:border-slate-700 text-slate-400' }}" aria-label="{{ 'Begründung anzeigen' if p.reason else 'Keine Begründung vorhanden' }}">
+                <i class="bi bi-info-circle"></i>
+              </summary>
+              <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-700 dark:text-slate-200 shadow-lg">{{ p.reason or 'Keine Begründung hinterlegt.' }}</div>
+            </details>
+            {% if not p.reason %}<span class="hidden md:inline text-slate-400">–</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
   </div>
   {% else %}
   <div class="text-center py-12">
@@ -146,21 +133,30 @@ function applyPositionFilter() {
   if (!select) return;
 
   const selected = (select.value || 'ALL').toUpperCase();
-  document.querySelectorAll('.position-group-section').forEach((section) => {
-    const key = (section.dataset.positionKey || '').toUpperCase();
+  document.querySelectorAll('.presence-row').forEach((row) => {
+    const key = (row.dataset.positionKey || '').toUpperCase();
     const visible = selected === 'ALL' || key === selected;
-    section.classList.toggle('hidden', !visible);
+    if (visible) {
+      row.style.removeProperty('display');
+    } else {
+      row.style.setProperty('display', 'none', 'important');
+    }
   });
 }
 
 function setCoachAttendance(button, trainingId, userId, attendanceStatus) {
   button.disabled = true;
-  fetch(`/api/trainings/${encodeURIComponent(trainingId)}/presence`, {
+  const presenceUrl = {{ url_for('attendance.set_presence_api', occurrence_id=occurrence_id)|tojson }};
+  fetch(presenceUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, attendance_status: attendanceStatus }),
   })
-    .then(response => response.json())
+    .then(async response => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok && !data.error) data.error = `Speichern fehlgeschlagen (${response.status})`;
+      return data;
+    })
     .then(data => {
       if (data.error) {
         alert(data.error);
@@ -175,11 +171,26 @@ function setCoachAttendance(button, trainingId, userId, attendanceStatus) {
     });
 }
 
+function alignCoachTableToolbar() {
+  const toolbar = document.getElementById('coachTableToolbar');
+  const table = document.querySelector('#coachTableShell table.js-smart-table');
+  const tableHost = table && table.parentElement;
+  const searchBar = tableHost && tableHost.previousElementSibling;
+  if (!toolbar || !searchBar || !searchBar.querySelector('input[type="search"]')) return;
+
+  const searchField = searchBar.firstElementChild;
+  if (!searchField) return;
+  searchField.className = 'relative w-full sm:w-80';
+  toolbar.appendChild(searchField);
+  searchBar.remove();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const select = document.getElementById('positionFilter');
   if (!select) return;
   select.addEventListener('change', applyPositionFilter);
   applyPositionFilter();
+  alignCoachTableToolbar();
 });
 </script>
 {% endblock %}

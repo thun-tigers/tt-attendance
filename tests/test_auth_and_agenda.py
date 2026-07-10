@@ -188,6 +188,24 @@ def test_attendance_card_renders_time_in_header_and_position_badges(client, app,
     assert '/coach/training/training-1' in body
 
 
+def test_coach_entry_redirects_to_next_training_and_statistics_has_own_route(client, app, monkeypatch):
+    coach_id = _make_coach(app)
+    monkeypatch.setattr(attendance_routes, 'fetch_trainings_from_agenda_for_teams', lambda team_codes=None, limit=None: [
+        {'id': 'training-1', 'title': 'Nächstes Training', 'is_cancelled': False},
+    ])
+
+    with client.session_transaction() as session:
+        session['user_id'] = coach_id
+
+    response = client.get('/coach')
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/coach/training/training-1')
+
+    statistics_response = client.get('/coach/statistics')
+    assert statistics_response.status_code == 200
+    assert 'Coach-Statistik' in statistics_response.get_data(as_text=True)
+
+
 def test_attendance_index_preloads_all_visible_training_summaries(client, app, monkeypatch):
     user_id = _make_user(app)
     summary_calls = []
@@ -387,6 +405,35 @@ def test_coach_presence_api_marks_user_unexcused_as_declined(client, app):
         assert attendance.presence_status == 'unexcused'
 
 
+def test_player_status_requires_reason_for_maybe_and_declined(client, app, monkeypatch):
+    user_id = _make_user(app)
+    monkeypatch.setattr(attendance_routes, 'fetch_training_occurrence_from_agenda', lambda occurrence_id: {
+        'id': occurrence_id,
+        'is_cancelled': False,
+    })
+    monkeypatch.setattr(attendance_routes, 'summarize_training_attendance', lambda occurrence_id: {
+        'summary': {'attending': 0, 'maybe': 0, 'declined': 1},
+        'position_summary': [],
+    })
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    missing_reason = client.post('/api/trainings/training-1/set-status', json={'status': 'declined'})
+    assert missing_reason.status_code == 400
+    assert missing_reason.get_json()['error'] == 'reason_required'
+
+    saved = client.post('/api/trainings/training-1/set-status', json={
+        'status': 'declined',
+        'reason': 'Verletzt',
+    })
+    assert saved.status_code == 200
+
+    with app.app_context():
+        attendance = Attendance.query.filter_by(training_id='training-1', user_id=42).first()
+        assert attendance.reason == 'Verletzt'
+
+
 def test_coach_detail_renders_presence_controls(client, app, monkeypatch):
     coach_id = _make_coach(app)
     with app.app_context():
@@ -417,9 +464,12 @@ def test_coach_detail_renders_presence_controls(client, app, monkeypatch):
     body = response.get_data(as_text=True)
     assert 'Präsenzkontrolle' in body
     assert 'OL' in body
-    assert 'Zugesagt · 1' in body
-    assert 'Unsicher · 1' in body
-    assert 'Abgesagt · 1' in body
+    assert 'Zugesagt' in body
+    assert 'Unsicher' in body
+    assert 'Abgesagt' in body
+    assert 'Vorname' in body
+    assert 'Nachname' in body
+    assert 'js-smart-table' in body
     assert 'OK' in body
     assert 'Unentschuldigt' in body
 

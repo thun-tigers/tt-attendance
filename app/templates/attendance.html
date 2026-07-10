@@ -8,7 +8,7 @@
     .status-btn[data-selected="false"]:hover,
     .status-btn[data-selected="false"]:focus {
       background-color: transparent !important;
-      border-color: transparent !important;
+      border-color: rgb(226 232 240) !important;
       box-shadow: none !important;
       color: rgb(100 116 139) !important;
       opacity: 0.7 !important;
@@ -18,6 +18,7 @@
     .dark .status-btn[data-selected="false"]:hover,
     .dark .status-btn[data-selected="false"]:focus {
       color: rgb(203 213 225) !important;
+      border-color: rgb(71 85 105) !important;
     }
   }
 </style>
@@ -40,21 +41,21 @@
           'icon': 'bi-hand-thumbs-up-fill',
           'tone': 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
           'button': 'bg-emerald-600 text-white border-emerald-600 shadow-sm',
-          'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300',
+          'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300',
         },
         'maybe': {
           'label': 'Unsicher',
           'icon': 'bi-question-circle-fill',
           'tone': 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700',
           'button': 'bg-slate-700 text-white border-slate-700 shadow-sm',
-          'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200',
+          'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200',
         },
         'declined': {
           'label': 'Absage',
           'icon': 'bi-hand-thumbs-down-fill',
           'tone': 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
           'button': 'bg-rose-600 text-white border-rose-600 shadow-sm',
-          'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-700 dark:hover:text-rose-300',
+          'button_idle': 'bg-transparent text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-700 dark:hover:text-rose-300',
         }
       } %}
       {% set current_status = status_meta.get(t.my_status) %}
@@ -165,6 +166,16 @@
         </div>
         {% endif %}
 
+        <div class="reason-editor hidden mt-3 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/60 dark:bg-indigo-900/20 p-3" data-reason-editor>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200" for="reason-{{ t.id }}">Begründung erforderlich</label>
+          <textarea id="reason-{{ t.id }}" class="reason-input mt-1.5 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400" rows="2" maxlength="500" placeholder="Warum bist du unsicher oder sagst du ab?">{{ t.my_reason or '' }}</textarea>
+          <p class="reason-error hidden mt-1 text-xs font-medium text-rose-600 dark:text-rose-400">Bitte gib eine Begründung ein.</p>
+          <div class="mt-2 flex justify-end gap-2">
+            <button type="button" class="reason-cancel rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800" onclick="cancelReason(this)">Abbrechen</button>
+            <button type="button" class="reason-save rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700" onclick="saveReason(this, '{{ t.id }}')">Speichern</button>
+          </div>
+        </div>
+
         <div class="attendance-summary mt-3">
           <div class="position-summary flex flex-wrap gap-1.5" aria-label="Zusagen pro Gruppe">
             {% if t.position_summary %}
@@ -206,24 +217,40 @@
 
 {% block extra_js %}
 <script>
+const statusUrlTemplate = {{ url_for('attendance.set_status_api', occurrence_id='__TRAINING_ID__')|tojson }};
+const attendanceSummaryUrlTemplate = {{ url_for('api.handle_attendance', occurrence_id='__TRAINING_ID__')|tojson }};
+const deferredTrainingsUrl = {{ url_for('attendance.deferred_trainings')|tojson }};
+
+function buildTrainingUrl(template, trainingId) {
+  return template.replace('__TRAINING_ID__', encodeURIComponent(trainingId));
+}
+
 function setStatus(btn, trainingId, status) {
   const card = btn.closest('.training-card');
   if (!card) return;
+  if (status === 'maybe' || status === 'declined') {
+    openReasonEditor(card, status);
+    return;
+  }
+  applyStatusSelection(card, btn, trainingId, status, null);
+}
+
+function applyStatusSelection(card, btn, trainingId, status, reason) {
   const buttons = card.querySelectorAll('.status-btn');
   const baseClass = 'status-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] font-semibold transition-all border-2 min-h-[3.2rem]';
 
   const styleMap = {
     attending: {
       active: 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.02] ring-2 ring-emerald-300/60 dark:ring-emerald-800/60 opacity-100',
-      idle: 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent opacity-70 hover:opacity-100 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300',
+      idle: 'bg-transparent text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700 opacity-70 hover:opacity-100 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300',
     },
     maybe: {
       active: 'bg-slate-700 text-white border-slate-700 shadow-sm scale-[1.02] ring-2 ring-slate-300/60 dark:ring-slate-700/60 opacity-100',
-      idle: 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent opacity-70 hover:opacity-100 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200',
+      idle: 'bg-transparent text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700 opacity-70 hover:opacity-100 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200',
     },
     declined: {
       active: 'bg-rose-600 text-white border-rose-600 shadow-sm scale-[1.02] ring-2 ring-rose-300/60 dark:ring-rose-800/60 opacity-100',
-      idle: 'bg-transparent text-slate-500 dark:text-slate-300 border-transparent opacity-70 hover:opacity-100 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-700 dark:hover:text-rose-300',
+      idle: 'bg-transparent text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700 opacity-70 hover:opacity-100 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-700 dark:hover:text-rose-300',
     },
   };
 
@@ -240,7 +267,41 @@ function setStatus(btn, trainingId, status) {
   btn.setAttribute('aria-pressed', 'true');
   btn.blur();
 
-  sendStatus(trainingId, status, null);
+  sendStatus(trainingId, status, reason);
+}
+
+function openReasonEditor(card, status) {
+  const editor = card.querySelector('[data-reason-editor]');
+  if (!editor) return;
+  editor.dataset.status = status;
+  editor.classList.remove('hidden');
+  const input = editor.querySelector('.reason-input');
+  const error = editor.querySelector('.reason-error');
+  if (error) error.classList.add('hidden');
+  if (input) input.focus();
+}
+
+function cancelReason(button) {
+  const editor = button.closest('[data-reason-editor]');
+  if (editor) editor.classList.add('hidden');
+}
+
+function saveReason(button, trainingId) {
+  const card = button.closest('.training-card');
+  const editor = card && card.querySelector('[data-reason-editor]');
+  const input = editor && editor.querySelector('.reason-input');
+  const reason = input ? input.value.trim() : '';
+  if (!card || !editor || !input || !reason) {
+    const error = editor && editor.querySelector('.reason-error');
+    if (error) error.classList.remove('hidden');
+    if (input) input.focus();
+    return;
+  }
+  const status = editor.dataset.status;
+  const statusButton = card.querySelector(`.status-btn[data-status="${status}"]`);
+  if (!statusButton) return;
+  applyStatusSelection(card, statusButton, trainingId, status, reason);
+  editor.classList.add('hidden');
 }
 
 function sendStatus(trainingId, status, reason) {
@@ -248,7 +309,7 @@ function sendStatus(trainingId, status, reason) {
   if (typeof reason === 'string' && reason.trim()) {
     payload.reason = reason.trim();
   }
-  fetch(`/api/trainings/${trainingId}/set-status`, {
+  fetch(buildTrainingUrl(statusUrlTemplate, trainingId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -311,7 +372,7 @@ function loadSummaryForCard(card) {
   }
   card.dataset.summaryLoading = 'true';
   const trainingId = card.dataset.trainingId;
-  fetch(`/api/trainings/${trainingId}/attendance?summary_only=1`)
+  fetch(`${buildTrainingUrl(attendanceSummaryUrlTemplate, trainingId)}?summary_only=1`)
     .then(r => r.json())
     .then(data => {
       if (data.summary) {
@@ -366,7 +427,10 @@ async function loadDeferredTrainings(offset = 0) {
   const numericOffset = Number.isFinite(offset) ? offset : Number(offset) || 0;
   const loader = document.getElementById('training-list-loader');
   try {
-    const response = await fetch(`/api/trainings/deferred?offset=${numericOffset}&limit=${DEFERRED_BATCH_SIZE}`);
+    const deferredUrl = new URL(deferredTrainingsUrl, window.location.origin);
+    deferredUrl.searchParams.set('offset', numericOffset);
+    deferredUrl.searchParams.set('limit', DEFERRED_BATCH_SIZE);
+    const response = await fetch(deferredUrl.toString());
     if (!response.ok) {
       throw new Error(`deferred trainings request failed with ${response.status}`);
     }
