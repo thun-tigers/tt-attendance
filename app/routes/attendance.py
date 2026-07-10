@@ -20,6 +20,50 @@ bp = Blueprint('attendance', __name__)
 _WEEKDAY_SHORT = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO']
 
 
+def _user_audiences(current_user):
+    """Map auth claims to stable attendance-policy audience keys."""
+    if not current_user:
+        return set()
+    service_role = (current_user.get('role') or '').strip().lower()
+    if service_role == 'admin':
+        return {'admin', 'player', 'coach', 'team_manager'}
+
+    audiences = {
+        (role or '').strip().lower()
+        for role in (current_user.get('member_roles') or [])
+        if isinstance(role, str) and role.strip()
+    }
+    if service_role in {'coach', 'head_coach'}:
+        audiences.add('coach')
+    if service_role in {'team_manager', 'manager'}:
+        audiences.add('team_manager')
+    if service_role == 'user' and not audiences:
+        audiences.add('player')
+    return audiences
+
+
+def _attendance_policy(training, current_user):
+    meta = training.get('category_meta') or {
+        'required_for': ['player'],
+        'allowed_for': ['player'],
+        'show_presence_tracking': True,
+        'label': 'Training',
+        'icon': 'bi-calendar-event',
+    }
+    audiences = _user_audiences(current_user)
+    required_for = set(meta.get('required_for') or [])
+    allowed_for = set(meta.get('allowed_for') or [])
+    is_admin = 'admin' in audiences
+    return {
+        'can_respond': is_admin or bool(audiences & allowed_for),
+        'required': is_admin or bool(audiences & required_for),
+        'show_presence_tracking': bool(meta.get('show_presence_tracking', True)),
+        'category_label': meta.get('label') or training.get('category') or 'Training',
+        'category_icon': meta.get('icon') or 'bi-calendar-event',
+        'category_badge_class': meta.get('badge_class') or 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    }
+
+
 def _cleanup_cancelled_training(occurrence_id):
     removed = Attendance.query.filter_by(training_id=str(occurrence_id)).delete(synchronize_session=False)
     if removed:
@@ -79,10 +123,18 @@ def _build_training_cards(current_user, trainings, position_groups, load_first_s
             position_summary = summarize_training_attendance(aid, position_groups)['position_summary']
         else:
             position_summary = []
+        policy = _attendance_policy(t, current_user)
 
         cards.append({
             'id': aid,
             'title': t.get('title', 'Training'),
+            'category': t.get('category', 'training'),
+            'category_label': policy['category_label'],
+            'category_icon': policy['category_icon'],
+            'category_badge_class': policy['category_badge_class'],
+            'can_respond': policy['can_respond'],
+            'attendance_required': policy['required'],
+            'show_presence_tracking': policy['show_presence_tracking'],
             'team_code': t.get('team_code'),
             'date': t.get('date'),
             'date_label': _format_date_label(t.get('date')),
@@ -453,6 +505,8 @@ def set_status_api(occurrence_id):
     if training and training.get('is_cancelled'):
         _cleanup_cancelled_training(occurrence_id)
         return jsonify({'error': 'cancelled_training'}), 409
+    if training and not _attendance_policy(training, current_user)['can_respond']:
+        return jsonify({'error': 'attendance_not_allowed'}), 403
 
     data = request.get_json(silent=True) or {}
     status = data.get('status')

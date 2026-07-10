@@ -434,6 +434,29 @@ def test_player_status_requires_reason_for_maybe_and_declined(client, app, monke
         assert attendance.reason == 'Verletzt'
 
 
+def test_category_policy_blocks_player_response_when_not_allowed(client, app, monkeypatch):
+    user_id = _make_user(app)
+    monkeypatch.setattr(attendance_routes, 'fetch_training_occurrence_from_agenda', lambda occurrence_id: {
+        'id': occurrence_id,
+        'category': 'event',
+        'category_meta': {
+            'label': 'Event',
+            'required_for': ['coach'],
+            'allowed_for': ['coach', 'team_manager'],
+            'show_presence_tracking': True,
+        },
+        'is_cancelled': False,
+    })
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    response = client.post('/api/trainings/training-1/set-status', json={'status': 'attending'})
+
+    assert response.status_code == 403
+    assert response.get_json()['error'] == 'attendance_not_allowed'
+
+
 def test_coach_detail_renders_presence_controls(client, app, monkeypatch):
     coach_id = _make_coach(app)
     with app.app_context():
