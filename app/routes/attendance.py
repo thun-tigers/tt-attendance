@@ -280,12 +280,15 @@ def index():
         load_all_summaries=True,
     )
 
+    visible_teams = sorted({t['team_code'] for t in trainings_with_status if t.get('team_code')})
+
     return render_template(
         'attendance.html',
         current_user=current_user,
         trainings=trainings_with_status,
         has_more_trainings=bool(trainings and len(trainings) == 10),
         is_coach=_is_coach_user(current_user),
+        visible_teams=visible_teams,
         active_tab='attendance',
     )
 

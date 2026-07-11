@@ -1,5 +1,6 @@
 <div class="training-card rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-full"
      data-training-id="{{ t.id }}"
+     data-team="{{ t.team_code or '' }}"
      data-summary-loaded="{{ 'true' if t.summary_loaded else 'false' }}">
   {% set status_meta = {
     'attending': {
