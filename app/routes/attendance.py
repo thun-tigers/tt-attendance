@@ -8,6 +8,7 @@ from ..attendance_summary import fetch_member_position, fetch_position_groups, s
 from ..forms import AttendanceForm
 from ..jwt_utils import (
     fetch_trainings_from_agenda_for_teams,
+    fetch_past_trainings_from_agenda,
     fetch_training_occurrence_from_agenda,
     fetch_user_from_auth,
 )
@@ -327,6 +328,33 @@ def deferred_trainings():
         'limit': limit,
         'has_more': has_more,
     })
+
+
+@bp.route('/api/trainings/past', methods=['GET'])
+def past_trainings():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'error': 'authentication_required'}), 401
+
+    weeks = request.args.get('weeks', type=int) or 4
+    past = fetch_past_trainings_from_agenda(_visible_team_codes(current_user) or None, weeks=weeks)
+    if not past:
+        return jsonify({'html': '', 'count': 0})
+
+    _cleanup_cancelled_trainings(past)
+    position_groups = fetch_position_groups()
+    trainings_with_status = _build_training_cards(
+        current_user,
+        past,
+        position_groups,
+        load_all_summaries=True,
+    )
+
+    html = ''.join(
+        render_template('attendance_card.html', t=t, is_coach=_is_coach_user(current_user))
+        for t in trainings_with_status
+    )
+    return jsonify({'html': html, 'count': len(trainings_with_status)})
 
 
 @bp.route('/coach')

@@ -200,6 +200,19 @@
   <div id="training-list-loader" class="hidden mt-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 px-4 py-4 text-sm text-slate-500 dark:text-slate-400">
     Weitere Trainings werden geladen.
   </div>
+
+  <div class="mt-4 flex justify-center">
+    <button id="toggle-past-btn"
+      onclick="togglePastTrainings()"
+      class="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+      <i class="bi bi-clock-history"></i>
+      <span id="toggle-past-label">Vergangene Trainings anzeigen</span>
+    </button>
+  </div>
+  <div id="past-training-list" class="hidden grid gap-3 mt-3"></div>
+  <div id="past-training-loader" class="hidden mt-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 px-4 py-4 text-sm text-slate-500 dark:text-slate-400 text-center">
+    Vergangene Trainings werden geladen…
+  </div>
   {% else %}
   <!-- Empty state -->
   <div class="text-center py-16">
@@ -452,6 +465,51 @@ async function loadDeferredTrainings(offset = 0) {
       loader.textContent = 'Weitere Trainings konnten nicht geladen werden.';
       loader.classList.remove('hidden');
     }
+  }
+}
+
+const pastTrainingsUrl = {{ url_for('attendance.past_trainings')|tojson }};
+let pastLoaded = false;
+let pastVisible = false;
+
+async function togglePastTrainings() {
+  const list = document.getElementById('past-training-list');
+  const loader = document.getElementById('past-training-loader');
+  const label = document.getElementById('toggle-past-label');
+  const btn = document.getElementById('toggle-past-btn');
+
+  pastVisible = !pastVisible;
+
+  if (!pastVisible) {
+    list.classList.add('hidden');
+    label.textContent = 'Vergangene Trainings anzeigen';
+    btn.querySelector('i').className = 'bi bi-clock-history';
+    return;
+  }
+
+  label.textContent = 'Vergangene Trainings ausblenden';
+  btn.querySelector('i').className = 'bi bi-eye-slash';
+  list.classList.remove('hidden');
+
+  if (pastLoaded) return;
+
+  loader.classList.remove('hidden');
+  try {
+    const response = await fetch(pastTrainingsUrl);
+    if (!response.ok) throw new Error(`status ${response.status}`);
+    const data = await response.json();
+    if (data.html) {
+      const template = document.createElement('template');
+      template.innerHTML = data.html.trim();
+      list.appendChild(template.content);
+    } else {
+      list.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">Keine vergangenen Trainings gefunden.</p>';
+    }
+    pastLoaded = true;
+  } catch (err) {
+    list.innerHTML = '<p class="text-sm text-rose-400 text-center py-4">Vergangene Trainings konnten nicht geladen werden.</p>';
+  } finally {
+    loader.classList.add('hidden');
   }
 }
 

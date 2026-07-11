@@ -82,6 +82,34 @@ def fetch_trainings_from_agenda_for_teams(team_codes=None, limit=None):
     return []
 
 
+def fetch_past_trainings_from_agenda(team_codes=None, weeks=4):
+    """Fetch past trainings from tt-agenda for the last N weeks."""
+    agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
+    secret = current_app.config.get('INTERNAL_API_SECRET')
+    params = {'weeks': str(int(weeks))}
+    if team_codes:
+        normalized = sorted({
+            (code or '').strip().upper()
+            for code in team_codes
+            if (code or '').strip()
+        })
+        if normalized:
+            params['teams'] = ','.join(normalized)
+    try:
+        resp = requests.get(
+            f'{agenda_url}/api/trainings/past',
+            headers={'X-TT-Internal-Secret': secret, 'Authorization': f'Bearer {create_sso_token()}'},
+            params=params,
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            return resp.json().get('trainings', [])
+        current_app.logger.warning('tt-agenda past trainings fetch failed with status %s', resp.status_code)
+    except requests.RequestException:
+        current_app.logger.warning('tt-agenda past trainings fetch failed', exc_info=True)
+    return []
+
+
 def fetch_training_occurrence_from_agenda(occurrence_id, team_codes=None):
     """Fetch a single training occurrence from tt-agenda."""
     agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'
