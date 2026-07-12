@@ -48,8 +48,6 @@ def ensure_eligibility(training):
 
 
 def summarize(training, ensure=True):
-    if training.get('date') and training.get('date') > date.today().isoformat():
-        return {'training_id': str(training.get('id')), 'title': training.get('title'), 'date': training.get('date'), 'team_code': training.get('team_code'), 'category': training.get('category'), 'approximate': False, 'eligible': 0, 'responded': 0, 'status': {'attending': 0, 'maybe': 0, 'declined': 0, 'no_response': 0}, 'presence': {'present': 0, 'unexcused': 0, 'tracked': 0}, 'response_rate': None, 'attendance_rate': None}
     eligibility = ensure_eligibility(training) if ensure else AttendanceEligibility.query.filter_by(training_id=str(training.get('id'))).all()
     required = [row for row in eligibility if row.response_required]
     required_ids = {row.user_id for row in required}

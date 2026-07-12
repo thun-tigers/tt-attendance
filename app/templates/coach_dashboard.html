@@ -28,10 +28,24 @@
 
   {# Filter-Leiste #}
   <form method="get" id="filter-form" class="flex flex-wrap items-end gap-3 mb-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
+    {# Team-Selektor #}
+    {% if all_teams %}
+    <div class="flex flex-col gap-1">
+      <label class="text-xs font-semibold text-slate-500">Team</label>
+      <select name="team" class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm">
+        <option value="">Alle Teams</option>
+        {% for code in all_teams %}
+        <option value="{{ code }}" {% if selected_team == code %}selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="self-end pb-2 text-slate-300 dark:text-slate-600">|</div>
+    {% endif %}
+
     {# Zeitraum-Dropdown #}
     <div class="flex flex-col gap-1">
       <label class="text-xs font-semibold text-slate-500">Zeitraum</label>
-      <select name="weeks" id="weeks-select" class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm" onchange="document.getElementById('date_from').value=''; document.getElementById('date_to').value=''; this.form.submit()">
+      <select name="weeks" id="weeks-select" class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm" onchange="document.getElementById('date_from').value=''; document.getElementById('date_to').value='';">
         {% for value, label in [(4,'4 Wochen'),(12,'3 Monate'),(26,'6 Monate'),(52,'1 Jahr'),(104,'2 Jahre')] %}
         <option value="{{ value }}" {% if active_weeks and active_weeks|int == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
@@ -45,13 +59,13 @@
       <label class="text-xs font-semibold text-slate-500">Von</label>
       <input type="date" name="date_from" id="date_from" value="{{ active_date_from or '' }}"
         class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-        onchange="document.getElementById('weeks-select').value=''; ">
+        onchange="document.getElementById('weeks-select').value='';">
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-xs font-semibold text-slate-500">Bis</label>
       <input type="date" name="date_to" id="date_to" value="{{ active_date_to or '' }}"
         class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-        onchange="document.getElementById('weeks-select').value=''; ">
+        onchange="document.getElementById('weeks-select').value='';">
     </div>
     <button type="submit" class="self-end px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">Anzeigen</button>
 

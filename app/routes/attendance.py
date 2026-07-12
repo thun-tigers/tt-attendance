@@ -429,26 +429,35 @@ def coach_statistics():
         date_from = None
         date_to = None
 
-    trainings = fetch_past_trainings_from_agenda(_visible_team_codes(current_user) or None, weeks=weeks)
-    upcoming = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    visible_codes = _visible_team_codes(current_user) or None
+    selected_team = (request.args.get('team') or '').strip().upper() or None
+
+    trainings = fetch_past_trainings_from_agenda(visible_codes, weeks=weeks)
+    upcoming = fetch_trainings_from_agenda_for_teams(visible_codes)
     seen = {str(item.get('id')) for item in trainings}
     trainings.extend(item for item in upcoming if str(item.get('id')) not in seen)
     _cleanup_cancelled_trainings(trainings)
 
+    # Alle verfügbaren Teams aus den Trainingsdaten ermitteln
+    all_teams = sorted({(t.get('team_code') or '').upper() for t in trainings if t.get('team_code')})
+
+    def _parse_date(d):
+        if not d:
+            return None
+        try:
+            return _date.fromisoformat(str(d))
+        except (ValueError, TypeError):
+            return None
+
     if date_from or date_to:
-        from datetime import datetime as _dt
-        def _parse_date(d):
-            if not d:
-                return None
-            try:
-                return _date.fromisoformat(str(d))
-            except (ValueError, TypeError):
-                return None
         trainings = [
             t for t in trainings
             if (not date_from or (_parse_date(t.get('date')) or _date.min) >= date_from)
             and (not date_to or (_parse_date(t.get('date')) or _date.max) <= date_to)
         ]
+
+    if selected_team:
+        trainings = [t for t in trainings if (t.get('team_code') or '').upper() == selected_team]
 
     stats = aggregate(trainings)
     training_summaries = []
@@ -470,6 +479,8 @@ def coach_statistics():
         active_weeks=request.args.get('weeks', '52') if not (date_from_str or date_to_str) else None,
         active_date_from=date_from_str,
         active_date_to=date_to_str,
+        all_teams=all_teams,
+        selected_team=selected_team,
     )
 
 
