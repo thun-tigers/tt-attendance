@@ -407,12 +407,49 @@ def coach_statistics():
     if not is_coach:
         return redirect(url_for('attendance.index'))
 
-    weeks = min(request.args.get('weeks', type=int) or 52, 520)
+    from datetime import date as _date, timedelta
+    date_from_str = request.args.get('date_from', '').strip()
+    date_to_str = request.args.get('date_to', '').strip()
+    try:
+        date_from = _date.fromisoformat(date_from_str) if date_from_str else None
+    except ValueError:
+        date_from = None
+    try:
+        date_to = _date.fromisoformat(date_to_str) if date_to_str else None
+    except ValueError:
+        date_to = None
+
+    if date_from or date_to:
+        # Fetch a wide range and filter by date
+        weeks = 520
+        date_from = date_from or (_date.today() - timedelta(weeks=52))
+        date_to = date_to or _date.today()
+    else:
+        weeks = min(request.args.get('weeks', type=int) or 52, 520)
+        date_from = None
+        date_to = None
+
     trainings = fetch_past_trainings_from_agenda(_visible_team_codes(current_user) or None, weeks=weeks)
     upcoming = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
     seen = {str(item.get('id')) for item in trainings}
     trainings.extend(item for item in upcoming if str(item.get('id')) not in seen)
     _cleanup_cancelled_trainings(trainings)
+
+    if date_from or date_to:
+        from datetime import datetime as _dt
+        def _parse_date(d):
+            if not d:
+                return None
+            try:
+                return _date.fromisoformat(str(d))
+            except (ValueError, TypeError):
+                return None
+        trainings = [
+            t for t in trainings
+            if (not date_from or (_parse_date(t.get('date')) or _date.min) >= date_from)
+            and (not date_to or (_parse_date(t.get('date')) or _date.max) <= date_to)
+        ]
+
     stats = aggregate(trainings)
     training_summaries = []
     for row in stats['trainings']:
@@ -430,6 +467,9 @@ def coach_statistics():
         dashboard_summary=stats['summary'],
         is_coach=is_coach,
         active_tab='statistics',
+        active_weeks=request.args.get('weeks', '52') if not (date_from_str or date_to_str) else None,
+        active_date_from=date_from_str,
+        active_date_to=date_to_str,
     )
 
 
