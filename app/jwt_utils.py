@@ -44,6 +44,23 @@ def fetch_user_from_auth(user_id):
     return None
 
 
+def fetch_team_members_from_auth(team_code, as_of=None):
+    """Fetch time-valid team memberships from the central auth service."""
+    auth_url = current_app.config.get('TT_AUTH_INTERNAL_URL') or 'http://tt-auth:5000'
+    try:
+        response = requests.get(
+            f'{auth_url}/api/internal/teams/{team_code}/members',
+            params={'as_of': as_of} if as_of else None,
+            headers={'X-TT-Internal-Secret': current_app.config.get('INTERNAL_API_SECRET')},
+            timeout=5,
+        )
+        if response.status_code == 200:
+            return response.json().get('members', [])
+    except requests.RequestException:
+        pass
+    return []
+
+
 def fetch_trainings_from_agenda_for_teams(team_codes=None, limit=None):
     """Fetch upcoming trainings from tt-agenda, optionally filtered by teams."""
     agenda_url = current_app.config.get('TT_AGENDA_INTERNAL_URL') or 'http://tt-agenda:5000'

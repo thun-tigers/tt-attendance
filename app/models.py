@@ -63,3 +63,19 @@ class Attendance(db.Model):
 
     def __repr__(self):
         return f'<Attendance training={self.training_id} user={self.user_id} status={self.status}>'
+
+
+class AttendanceEligibility(db.Model):
+    """Immutable per-occurrence denominator snapshot for statistics."""
+    __tablename__ = 'attendance_eligibility'
+    __table_args__ = (db.UniqueConstraint('training_id', 'user_id', name='uq_eligibility_training_user'),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    training_id = db.Column(db.String(64), nullable=False, index=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)  # canonical tt-auth auth_user_id
+    team_code = db.Column(db.String(32), nullable=True, index=True)
+    member_role = db.Column(db.String(32), nullable=True)
+    response_required = db.Column(db.Boolean, nullable=False, default=False)
+    presence_tracked = db.Column(db.Boolean, nullable=False, default=True)
+    source = db.Column(db.String(32), nullable=False, default='category')
+    snapshot_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

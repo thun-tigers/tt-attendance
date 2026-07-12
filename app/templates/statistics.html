@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Meine Statistik – Tigers{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-5">
+  <div class="tt-page-hero">
+    <p class="tt-eyebrow">Beteiligung</p>
+    <h1 class="mt-1 text-2xl font-bold">Meine Statistik</h1>
+    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Nur deine anmeldepflichtigen Termine werden ausgewertet.</p>
+  </div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    {% for label, value in [('Soll-Teilnehmer', summary.eligible), ('Rückmeldungen', summary.responded), ('Keine Rückmeldung', summary.no_response), ('Anwesend', summary.present)] %}
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4"><div class="text-xs text-slate-500">{{ label }}</div><div class="mt-1 text-2xl font-bold text-indigo-600">{{ value or 0 }}</div></div>
+    {% endfor %}
+  </div>
+  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <h2 class="font-semibold">Auswertung</h2>
+    <div class="mt-3 grid grid-cols-2 gap-3 text-sm"><span>Rückmeldequote</span><strong>{{ ((summary.response_rate or 0) * 100)|round(1) }}%</strong><span>Anwesenheitsquote</span><strong>{{ ((summary.attendance_rate or 0) * 100)|round(1) }}%</strong></div>
+  </div>
+  <div class="space-y-2">{% for item in trainings %}<div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 flex justify-between"><span><strong>{{ item.title }}</strong><span class="block text-xs text-slate-500">{{ item.date }}</span></span><span class="text-sm">{{ item.mine or 'Keine Rückmeldung' }}</span></div>{% else %}<p class="text-sm text-slate-500">Keine Statistikdaten vorhanden.</p>{% endfor %}</div>
+</div>
+{% endblock %}

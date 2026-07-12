@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, render_template, request, redirect, ur
 from ..authz import has_role_permission
 from ..extensions import db
 from ..models import Attendance
+from ..statistics import aggregate, personal_aggregate
 from ..attendance_summary import fetch_member_position, fetch_position_groups, summarize_training_attendance
 from ..forms import AttendanceForm
 from ..jwt_utils import (
@@ -293,6 +294,20 @@ def index():
     )
 
 
+@bp.route('/statistics')
+def personal_statistics():
+    current_user = get_current_user()
+    if not current_user:
+        return redirect(url_for('auth.login'))
+    weeks = min(request.args.get('weeks', type=int) or 52, 520)
+    trainings = fetch_past_trainings_from_agenda(_visible_team_codes(current_user) or None, weeks=weeks)
+    upcoming = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    seen = {str(item.get('id')) for item in trainings}
+    trainings.extend(item for item in upcoming if str(item.get('id')) not in seen)
+    stats = personal_aggregate(trainings, current_user['id'])
+    return render_template('statistics.html', current_user=current_user, summary=stats['summary'], trainings=stats['trainings'], active_tab='statistics')
+
+
 @bp.route('/api/trainings/deferred', methods=['GET'])
 def deferred_trainings():
     current_user = get_current_user()
@@ -392,34 +407,27 @@ def coach_statistics():
     if not is_coach:
         return redirect(url_for('attendance.index'))
 
-    # Fetch trainings with attendance counts
-    trainings = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    weeks = min(request.args.get('weeks', type=int) or 52, 520)
+    trainings = fetch_past_trainings_from_agenda(_visible_team_codes(current_user) or None, weeks=weeks)
+    upcoming = fetch_trainings_from_agenda_for_teams(_visible_team_codes(current_user) or None)
+    seen = {str(item.get('id')) for item in trainings}
+    trainings.extend(item for item in upcoming if str(item.get('id')) not in seen)
     _cleanup_cancelled_trainings(trainings)
-
-    # Build summary per training
+    stats = aggregate(trainings)
     training_summaries = []
-    for t in trainings:
-        tid = str(t.get('id', ''))
-        attendances = Attendance.query.filter_by(training_id=tid).all()
-        summary = {'attending': 0, 'maybe': 0, 'declined': 0}
-        for a in attendances:
-            summary[a.status] = summary.get(a.status, 0) + 1
-
+    for row in stats['trainings']:
         training_summaries.append({
-            'id': tid,
-            'title': t.get('title', 'Training'),
-            'team_code': t.get('team_code'),
-            'date': t.get('date'),
-            'time': t.get('time'),
-            'summary': summary,
-            'presence': _presence_counts(attendances),
-            'total': len(attendances),
+            'id': row['training_id'], 'title': row['title'] or 'Training',
+            'team_code': row['team_code'], 'date': row['date'],
+            'summary': row['status'], 'presence': row['presence'],
+            'eligible': row['eligible'], 'response_rate': row['response_rate'],
         })
 
     return render_template(
         'coach_dashboard.html',
         current_user=current_user,
         trainings=training_summaries,
+        dashboard_summary=stats['summary'],
         is_coach=is_coach,
         active_tab='statistics',
     )

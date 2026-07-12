@@ -12,6 +12,10 @@
     {{ 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900' if ep == 'attendance.index' else 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900' }}">
     <i class="bi bi-hand-thumbs-up-fill"></i>Anmeldung
   </a>
+  <a href="{{ url_for('attendance.personal_statistics') }}" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition
+    {{ 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900' if ep == 'attendance.personal_statistics' else 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900' }}">
+    <i class="bi bi-graph-up"></i>Meine Statistik
+  </a>
   {% if current_user.role in ('admin', 'coach', 'head_coach') %}
   <a href="{{ url_for('attendance.coach_dashboard') }}" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition
     {{ 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900' if ep in ('attendance.coach_dashboard', 'attendance.coach_training_detail') else 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900' }}">

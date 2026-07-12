@@ -1,10 +1,12 @@
+from collections import defaultdict
 from flask import Blueprint, current_app, jsonify, request
 from datetime import datetime, timezone
 
 from ..extensions import db
 from ..models import Attendance
 from ..attendance_summary import summarize_training_attendance
-from ..jwt_utils import fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda
+from ..jwt_utils import fetch_user_from_auth, create_sso_token, fetch_training_occurrence_from_agenda, fetch_past_trainings_from_agenda, fetch_trainings_from_agenda_for_teams
+from ..statistics import aggregate, personal_aggregate, player_aggregate
 from .auth import get_current_user
 import requests
 
@@ -27,6 +29,53 @@ def _authorized():
 
 def _error(message, status_code=400):
     return jsonify({'error': message}), status_code
+
+
+def _statistics_trainings(current_user):
+    teams = current_user.get('teams') or []
+    past = fetch_past_trainings_from_agenda(teams or None, weeks=min(request.args.get('weeks', type=int) or 52, 520))
+    upcoming = fetch_trainings_from_agenda_for_teams(teams or None)
+    seen = {str(item.get('id')) for item in past}
+    return past + [item for item in upcoming if str(item.get('id')) not in seen]
+
+
+@bp.route('/me/statistics', methods=['GET'])
+def my_statistics():
+    current_user = get_current_user()
+    if not current_user:
+        return _error('authentication_required', 401)
+    return jsonify(personal_aggregate(_statistics_trainings(current_user), current_user['id']))
+
+
+@bp.route('/coach/statistics/overview', methods=['GET'])
+def coach_statistics_overview():
+    current_user = get_current_user()
+    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
+        return _error('forbidden', 403)
+    return jsonify(aggregate(_statistics_trainings(current_user)))
+
+
+@bp.route('/coach/statistics/groups', methods=['GET'])
+def coach_statistics_groups():
+    current_user = get_current_user()
+    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
+        return _error('forbidden', 403)
+    result = aggregate(_statistics_trainings(current_user))
+    groups = defaultdict(lambda: {'trainings': 0, 'eligible': 0, 'responded': 0})
+    for row in result['trainings']:
+        group = row.get('team_code') or 'unknown'
+        groups[group]['trainings'] += 1
+        groups[group]['eligible'] += row['eligible']
+        groups[group]['responded'] += row['responded']
+    return jsonify({'groups': groups, **result})
+
+
+@bp.route('/coach/statistics/players', methods=['GET'])
+def coach_statistics_players():
+    current_user = get_current_user()
+    if not current_user or current_user.get('role') not in ('admin', 'coach', 'head_coach'):
+        return _error('forbidden', 403)
+    return jsonify({'players': player_aggregate(_statistics_trainings(current_user))})
 
 
 # ===== Spieler-Endpunkte =====

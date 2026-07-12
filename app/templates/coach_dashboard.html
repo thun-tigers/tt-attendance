@@ -10,6 +10,27 @@
     </div>
   </div>
 
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+    {% for label, value in [('Soll-Teilnehmer', dashboard_summary.eligible), ('Rückmeldungen', dashboard_summary.responded), ('Keine Rückmeldung', dashboard_summary.no_response), ('Anwesend', dashboard_summary.present), ('Unentschuldigt', dashboard_summary.unexcused)] %}
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4"><div class="text-xs text-slate-500">{{ label }}</div><div class="mt-1 text-2xl font-bold text-indigo-600">{{ value or 0 }}</div></div>
+    {% endfor %}
+  </div>
+  <form method="get" class="flex flex-wrap items-center gap-2 mb-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
+    <label class="text-xs font-semibold text-slate-500">Zeitraum</label>
+    <select name="weeks" class="rounded-lg border px-3 py-2 text-sm" onchange="this.form.submit()">
+      {% for value, label in [(4,'4 Wochen'),(12,'3 Monate'),(26,'6 Monate'),(52,'1 Jahr'),(104,'2 Jahre')] %}<option value="{{ value }}" {% if request.args.get('weeks', '52')|int == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <span class="text-xs text-slate-500">Rückmeldequote: <strong>{{ ((dashboard_summary.response_rate or 0) * 100)|round(1) }}%</strong></span>
+    <span class="text-xs text-slate-500">Anwesenheitsquote: <strong>{{ ((dashboard_summary.attendance_rate or 0) * 100)|round(1) }}%</strong></span>
+  </form>
+  <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 mb-5">
+    <h2 class="font-semibold text-sm mb-3">Statusverteilung</h2>
+    {% set status_total = dashboard_summary.attending + dashboard_summary.maybe + dashboard_summary.declined + dashboard_summary.no_response %}
+    {% for key, label, tone in [('attending','Dabei','bg-emerald-500'),('maybe','Unsicher','bg-slate-400'),('declined','Abgesagt','bg-rose-500'),('no_response','Keine Rückmeldung','bg-amber-500')] %}
+    <div class="grid grid-cols-[110px_1fr_42px] items-center gap-2 text-xs mb-2"><span>{{ label }}</span><div class="h-2 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-2 rounded-full {{ tone }}" style="width: {{ ((dashboard_summary[key] or 0) / status_total * 100 if status_total else 0)|round(1) }}%"></div></div><strong class="text-right">{{ dashboard_summary[key] or 0 }}</strong></div>
+    {% endfor %}
+  </div>
+
   {% if trainings %}
   <div class="space-y-3">
     {% for t in trainings %}
