@@ -99,7 +99,9 @@ def build_position_summary(attendances, position_groups=None):
 
     result = list(by_key.values())
     if unknown_count:
-        result.append({'key': 'UNKNOWN', 'label': 'Ohne Gruppe', 'attending': unknown_count})
+        # Kurzer Key im Stil der Positionscodes (QB/OL/...), damit das kompakte
+        # Badge nicht das rohe "UNKNOWN" zeigt; "label" bleibt fuer Tooltips/Filter.
+        result.append({'key': 'OG', 'label': 'Ohne Gruppe', 'attending': unknown_count})
     return result
 
 
