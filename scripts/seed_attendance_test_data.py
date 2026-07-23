@@ -47,6 +47,32 @@ DEFAULT_RATIOS = (
     ('declined', 0.2),
 )
 
+DECLINED_REASONS = (
+    'Krank',
+    'Ferien',
+    'Arbeit bis spät',
+    'Verletzung',
+    'Familiärer Termin',
+    'Prüfung an der Uni',
+    'Auswärts, keine Zeit',
+    'Hochzeit eines Freundes',
+    'Zahnarzttermin',
+    'Kind ist krank',
+    'Militär / Zivilschutz',
+    'Bereits anderweitig verplant',
+)
+
+MAYBE_REASONS = (
+    'Eventuell Überstunden im Job',
+    'Warte auf Bestätigung vom Arbeitgeber',
+    'Bin erkältet, schaue wie es mir geht',
+    'Muss noch mit dem Chef klären',
+    'Fahrgelegenheit noch unsicher',
+    'Kleine Verletzung, taste mich ran',
+    'Familientermin evtl. verschiebbar',
+    'Melde mich kurzfristig',
+)
+
 
 class SeedConfig(Config):
     """Local-only config for seeding from the developer machine."""
@@ -194,11 +220,13 @@ def _seed_training(training: dict, users: list, seed: int, clear_existing: bool)
             attendance.status = status
             attendance.updated_at = now
 
-        attendance.reason = None
         if status == 'attending':
+            attendance.reason = None
             attendance.presence_status = 'present'
             attendance.presence_marked_at = now
         else:
+            reason_pool = DECLINED_REASONS if status == 'declined' else MAYBE_REASONS
+            attendance.reason = rng.choice(reason_pool)
             attendance.presence_status = None
             attendance.presence_marked_at = None
 

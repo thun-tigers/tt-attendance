@@ -1,6 +1,12 @@
 from app.extensions import db
 from app.models import Attendance, User
-from scripts.seed_attendance_test_data import _fetch_members_from_auth, _seed_training, _status_counts
+from scripts.seed_attendance_test_data import (
+    DECLINED_REASONS,
+    MAYBE_REASONS,
+    _fetch_members_from_auth,
+    _seed_training,
+    _status_counts,
+)
 
 
 def test_status_counts_match_requested_ratio():
@@ -35,7 +41,14 @@ def test_seed_training_writes_expected_distribution(app):
     assert sum(1 for attendance in attendances if attendance.status == 'attending') == 7
     assert sum(1 for attendance in attendances if attendance.status == 'maybe') == 1
     assert sum(1 for attendance in attendances if attendance.status == 'declined') == 2
-    assert all(attendance.reason is None for attendance in attendances)
+
+    for attendance in attendances:
+        if attendance.status == 'attending':
+            assert attendance.reason is None
+        elif attendance.status == 'declined':
+            assert attendance.reason in DECLINED_REASONS
+        elif attendance.status == 'maybe':
+            assert attendance.reason in MAYBE_REASONS
 
 
 def test_seed_training_accepts_auth_member_dicts(app):
