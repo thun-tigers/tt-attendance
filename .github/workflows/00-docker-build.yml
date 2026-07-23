@@ -2,6 +2,8 @@ name: Container Image
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -16,7 +18,28 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/${{ github.event.repository.name }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir "tt-common @ git+https://github.com/thun-tigers/tt-common@main"
+          pip install --no-cache-dir -r requirements.txt
+          pip install pytest==8.0.0
+
+      - name: Run tests
+        run: python -m pytest
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,6 +100,16 @@ jobs:
             echo "version=${version}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve tt-common base image tag
+        id: tc_tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -93,6 +126,7 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: TT_COMMON_TAG=${{ steps.tc_tag.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -105,3 +139,5 @@ jobs:
           while IFS= read -r tag; do
             echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
           done <<< "${{ steps.tags.outputs.tags }}"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- tt-common base: \`${{ steps.tc_tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
