@@ -5,6 +5,7 @@ from flask import Flask, session
 from sqlalchemy import inspect, text
 from werkzeug.middleware.proxy_fix import ProxyFix
 from .config import Config
+from .db_bootstrap import schema_setup_lock
 from .extensions import db, migrate, limiter
 from .models import User
 
@@ -82,8 +83,9 @@ def create_app(config_class=Config):
 
     with app.app_context():
         if app.config.get('AUTO_CREATE_DB', True):
-            db.create_all()
-            _ensure_attendance_columns()
+            with schema_setup_lock(db.engine):
+                db.create_all()
+                _ensure_attendance_columns()
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     return app
